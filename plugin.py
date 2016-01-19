@@ -13,6 +13,7 @@ from enigma import iPlayableService, iServiceInformation, eTimer, eConsoleAppCon
 from Plugins.Plugin import PluginDescriptor
 from Queue import Queue, PriorityQueue
 
+from Tools.BoundFunction import boundFunction
 from Screens.ChannelSelection import SimpleChannelSelection, service_types_tv, service_types_radio
 from twisted.web.client import downloadPage, getPage, error
 from twisted.internet import reactor, defer
@@ -32,6 +33,7 @@ config.plugins.epgShare = ConfigSubsection()
 config.plugins.epgShare.auto = ConfigYesNo(default = True)
 config.plugins.epgShare.hours = ConfigInteger(12, (1,24))
 config.plugins.epgShare.onstartup = ConfigYesNo(default = False)
+config.plugins.epgShare.onstartupdelay = ConfigInteger(2, (1,60))
 
 def getServiceList(ref):
 	root = eServiceReference(str(ref))
@@ -48,6 +50,17 @@ def getRefList():
 		bouquetlist = getServiceList(bouquet[0])
 		for (serviceref, servicename) in bouquetlist:
 			list.append(serviceref)
+	return list
+
+def getRefListJson():
+	list = []
+	tvbouquets = getTVBouquets()
+	for bouquet in tvbouquets:
+		bouquetlist = getServiceList(bouquet[0])
+		for (serviceref, servicename) in bouquetlist:
+			ref = {}
+			ref['ref'] = str(serviceref)
+			list.append((ref))
 	return list
 
 def colorprint(stringvalue):
@@ -87,6 +100,24 @@ class autoGetEpg():
 		epgDown = epgShareDownload(self.session)
 		epgDown.start()
 
+class delayEpgDownload():
+
+	def __init__(self, session):
+		assert not delayEpgDownload.instance, "only one delayEpgDownload instance is allowed!"
+		delayEpgDownload.instance = self
+		self.session = session
+
+	def startTimer(self):
+		if config.plugins.epgShare.onstartup.value:
+			self.delaytimer = eTimer()
+			self.delaytimer.callback.append(self.delayEpgDownload)
+			self.delaytimer.start(60000 * int(config.plugins.epgShare.onstartupdelay.value))
+
+	def delayEpgDownload(self):
+		self.delaytimer.stop()
+		epgDown = epgShareDownload(self.session)
+		epgDown.start()
+
 class epgShareDownload(threading.Thread):
 
 	def __init__(self, session, callback=False):
@@ -105,9 +136,14 @@ class epgShareDownload(threading.Thread):
 
 	def run(self):
 		colorprint("Hole EPG Daten vom Server")
+		reflist = getRefListJson()
+		print reflist
 		self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
 		url = "http://achansel.lima-city.de/get_epg.php"
-		data = str(requests.get(url).text)
+		#data = str(requests.get(url).text)
+		requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+		post = {'refliste': json.dumps(reflist)}
+		data = requests.post("http://achansel.lima-city.de/get_epg.php", data=post, timeout=60).text
 		events_list = []
 		try:
 			events = json.loads(data)['events']
@@ -292,6 +328,8 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Alle x Stunden:"), config.plugins.epgShare.hours))
 		self.list.append(getConfigListEntry(_("Beim Enigma2 start EPG automatisch vom Server holen:"), config.plugins.epgShare.onstartup))
+		if config.plugins.epgShare.onstartup.value:
+			self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen nach x Minuten:"), config.plugins.epgShare.onstartupdelay))
 
 	def changedEntry(self):
 		self.createConfigList()
@@ -334,6 +372,7 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.auto.save()
 		config.plugins.epgShare.hours.save()
 		config.plugins.epgShare.onstartup.save()
+		config.plugins.epgShare.onstartupdelay.save()
 		configfile.save()
 		if config.plugins.epgShare.auto.value:
 			if not bg_timer.isRunning():
@@ -353,13 +392,14 @@ def autostart(reason, **kwargs):
 	if "session" in kwargs:
 		session = kwargs["session"]
 
-		# Starte Service
+		# Starte Upload Service
 		epgShare(session)
 
-		# Hole EPG Daten vom Server 
+		# Hole EPG Daten vom Server beim e2 neustart mit delay
 		if config.plugins.epgShare.onstartup.value:
-			epgDown = epgShareDownload(session)
-			epgDown.start()
+			delayEpgDownload(session)
+			delay_timer = delayEpgDownload.instance
+			delay_timer.startTimer()
 
 		# Auto EPG Update Timer
 		autoGetEpg(session)
