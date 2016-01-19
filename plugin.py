@@ -30,8 +30,8 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 config.plugins.epgShare = ConfigSubsection()
 config.plugins.epgShare.auto = ConfigYesNo(default = True)
-config.plugins.epgShare.hours = ConfigInteger(1, (1,24))
-
+config.plugins.epgShare.hours = ConfigInteger(12, (1,24))
+config.plugins.epgShare.onstartup = ConfigYesNo(default = False)
 
 def getServiceList(ref):
 	root = eServiceReference(str(ref))
@@ -105,6 +105,7 @@ class epgShareDownload(threading.Thread):
 
 	def run(self):
 		colorprint("Hole EPG Daten vom Server")
+		self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
 		url = "http://achansel.lima-city.de/get_epg.php"
 		data = str(requests.get(url).text)
 		events_list = []
@@ -122,30 +123,34 @@ class epgShareDownload(threading.Thread):
 				channels = []
 				events_list = []
 				count_refs = len(events)
+				# eventlist.append((long(start), long(dur), event_name, subtitle+" "+countryOfProduction+" "+productionYear, handlung+"\n"+extraData, 0, long(event_id)),)
 				for event in events:
 					if str(event['channel_ref']) in reflist:
 						if str(event['channel_ref']) not in channels:
 							channels.append(str(event['channel_ref']))
 						if last_channel_ref in [str(event['channel_ref']), '']:
-							events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0),)
+							events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
 						else:
 							colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 							if self.callback:
 								self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 							#self.epgcache.clearServiceEPG(eServiceReference(last_channel_ref))
-							self.epgcache.importEvents(last_channel_ref, events_list)
+							#self.epgcache.importEvents(last_channel_ref, events_list)
+							self.epgcache.importEventswithID(last_channel_ref, events_list)
 							events_list = []
-							events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0),)
+							events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
 						last_channel_ref = str(event['channel_ref'])
 						last_channel_name = str(event['channel_name'])
 						count_refs += 1
 					
 				if int(count_refs) == int(count_refs):
 					colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+					self.msgCallback("EPG Download beendet.")
 					if self.callback:
 						self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 					#self.epgcache.clearServiceEPG(eServiceReference(last_channel_ref))
-					self.epgcache.importEvents(last_channel_ref, events_list)
+					#self.epgcache.importEvents(last_channel_ref, events_list)
+					self.epgcache.importEventswithID(last_channel_ref, events_list)
 			else:
 				colorprint("Keine reflist vorhanden.")
 
@@ -239,8 +244,8 @@ class epgSahreSetup(Screen, ConfigListScreen):
 	skin = """
 		<screen name="EPG Share Setup" title="EPG Share Setup" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
-			<widget name="config" position="10,60" size="1270,60" font="Regular;22" textOffset="20,2" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
-			<widget name="list2" position="10,150" size="1270,510" font="Regular;22" textOffset="20,7" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="config" position="10,60" size="1270,90" font="Regular;22" textOffset="20,2" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="list2" position="10,160" size="1270,510" font="Regular;22" textOffset="20,7" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
 			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
@@ -286,6 +291,7 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen:"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Alle x Stunden:"), config.plugins.epgShare.hours))
+		self.list.append(getConfigListEntry(_("Beim Enigma2 start EPG automatisch vom Server holen:"), config.plugins.epgShare.onstartup))
 
 	def changedEntry(self):
 		self.createConfigList()
@@ -327,6 +333,7 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		global bg_timer
 		config.plugins.epgShare.auto.save()
 		config.plugins.epgShare.hours.save()
+		config.plugins.epgShare.onstartup.save()
 		configfile.save()
 		if config.plugins.epgShare.auto.value:
 			if not bg_timer.isRunning():
@@ -350,8 +357,9 @@ def autostart(reason, **kwargs):
 		epgShare(session)
 
 		# Hole EPG Daten vom Server 
-		epgDown = epgShareDownload(session)
-		epgDown.start()
+		if config.plugins.epgShare.onstartup.value:
+			epgDown = epgShareDownload(session)
+			epgDown.start()
 
 		# Auto EPG Update Timer
 		autoGetEpg(session)
