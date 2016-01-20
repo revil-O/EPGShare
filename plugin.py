@@ -120,7 +120,7 @@ class delayEpgDownload():
 		if config.plugins.epgShare.onstartup.value:
 			self.delaytimer = eTimer()
 			self.delaytimer.callback.append(self.delayEpgDownload)
-			self.delaytimer.start(1000)
+			self.delaytimer.start(60000 * int(config.plugins.epgShare.onstartupdelay.value))
 
 	def delayEpgDownload(self):
 		self.delaytimer.stop()
