@@ -53,14 +53,23 @@ def getRefList():
 	return list
 
 def getRefListJson():
+	ret = {}
 	list = []
 	tvbouquets = getTVBouquets()
 	for bouquet in tvbouquets:
 		bouquetlist = getServiceList(bouquet[0])
 		for (serviceref, servicename) in bouquetlist:
+			try:
+				#lastevent = eEPGCache.getInstance().lookupEvent([ 'IBDTSEv', (str(serviceref), 0, time.time(), -1)])[-1]
+				lastevent = eEPGCache.getInstance().lookupEvent(["IB",(str(serviceref), 3)])
+				(event_id, starttime) = lastevent[0]
+				lasteventtime = starttime
+			except Exception, ex:
+				lasteventtime = 0
 			ref = {}
 			ref['ref'] = str(serviceref)
-			list.append((ref))
+			ref['time'] = lasteventtime
+			list.append(ref)
 	return list
 
 def colorprint(stringvalue):
@@ -111,7 +120,7 @@ class delayEpgDownload():
 		if config.plugins.epgShare.onstartup.value:
 			self.delaytimer = eTimer()
 			self.delaytimer.callback.append(self.delayEpgDownload)
-			self.delaytimer.start(60000 * int(config.plugins.epgShare.onstartupdelay.value))
+			self.delaytimer.start(1000)
 
 	def delayEpgDownload(self):
 		self.delaytimer.stop()
@@ -136,21 +145,20 @@ class epgShareDownload(threading.Thread):
 
 	def run(self):
 		colorprint("Hole EPG Daten vom Server")
-		reflist = getRefListJson()
-		print reflist
 		self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
-		url = "http://achansel.lima-city.de/get_epg.php"
-		#data = str(requests.get(url).text)
 		requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-		post = {'refliste': json.dumps(reflist)}
-		data = requests.post("http://achansel.lima-city.de/get_epg.php", data=post, timeout=60).text
+		refs = {}
+		refs['refs'] = getRefListJson()
+		data = requests.post("http://achansel.lima-city.de/download_epg.php", data=json.dumps(refs), timeout=60).text
 		events_list = []
 		try:
+			#colorprint("Antwort vom Server: %s" % str(data))
 			events = json.loads(data)['events']
+			colorprint("Antwort vom Server")
+			colorprint("Events: %d" % len(events))
 		except:
 			events = None
 			colorprint("Hole EPG Daten vom Server - Error")
-
 		if events is not None:
 			reflist = getRefList()
 			if len(reflist) > 0:
@@ -180,13 +188,15 @@ class epgShareDownload(threading.Thread):
 						count_refs += 1
 					
 				if int(count_refs) == int(count_refs):
+					self.epgcache.importEventswithID(last_channel_ref, events_list)
 					colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-					self.msgCallback("EPG Download beendet.")
+					colorprint("EPG Download beendet.")				
 					if self.callback:
 						self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+						self.msgCallback("EPG Download beendet.")
 					#self.epgcache.clearServiceEPG(eServiceReference(last_channel_ref))
 					#self.epgcache.importEvents(last_channel_ref, events_list)
-					self.epgcache.importEventswithID(last_channel_ref, events_list)
+					
 			else:
 				colorprint("Keine reflist vorhanden.")
 
@@ -280,8 +290,8 @@ class epgSahreSetup(Screen, ConfigListScreen):
 	skin = """
 		<screen name="EPG Share Setup" title="EPG Share Setup" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
-			<widget name="config" position="10,60" size="1270,90" font="Regular;22" textOffset="20,2" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
-			<widget name="list2" position="10,160" size="1270,510" font="Regular;22" textOffset="20,7" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="config" position="10,60" size="1270,120" font="Regular;22" textOffset="20,2" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="list2" position="10,190" size="1270,480" font="Regular;22" textOffset="20,7" itemHeight="30" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
 			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
@@ -339,7 +349,8 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		self.showInfo(text)
 
 	def showInfo(self, text):
-		self.list2.append((text))
+		#self.list2.append((text))
+		self.list2.insert(0, text)
 		self.chooseMenuList.setList(map(self.showList, self.list2))
 
 	def showList(self, entry):
