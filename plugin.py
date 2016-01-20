@@ -133,6 +133,7 @@ class epgShareDownload(threading.Thread):
 		self.session = session
 		self.callback = callback
 		self.callback_infos = None
+		self.isRunning = False
 		self.epgcache = eEPGCache.getInstance()
 		threading.Thread.__init__(self)
 
@@ -143,7 +144,11 @@ class epgShareDownload(threading.Thread):
 		if self.callback_infos:
 			self.callback_infos(txt)
 
+	def stop(self):
+		self.isRunning = False
+
 	def run(self):
+		self.isRunning = True
 		colorprint("Hole EPG Daten vom Server")
 		self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
 		requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -169,6 +174,8 @@ class epgShareDownload(threading.Thread):
 				count_refs = len(events)
 				# eventlist.append((long(start), long(dur), event_name, subtitle+" "+countryOfProduction+" "+productionYear, handlung+"\n"+extraData, 0, long(event_id)),)
 				for event in events:
+					if not self.isRunning:
+						break
 					if str(event['channel_ref']) in reflist:
 						if str(event['channel_ref']) not in channels:
 							channels.append(str(event['channel_ref']))
@@ -199,6 +206,7 @@ class epgShareDownload(threading.Thread):
 					
 			else:
 				colorprint("Keine reflist vorhanden.")
+		self.isRunning = False
 
 class epgShareUploader(threading.Thread):
 
@@ -329,6 +337,7 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		self['key_blue'] = Label("")
 		self.list = []
 		self.list2 = []
+		self.isEpgDownload = False
 		self.createConfigList()
 		ConfigListScreen.__init__(self, self.list)
 
@@ -346,6 +355,9 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		self["config"].setList(self.list)
 
 	def callbacks(self, text):
+		if text == "EPG Download beendet.":
+			self.isEpgDownload = False
+			print "setze download FALSE"
 		self.showInfo(text)
 
 	def showInfo(self, text):
@@ -360,9 +372,10 @@ class epgSahreSetup(Screen, ConfigListScreen):
 
 	def keyRun(self):
 		self.list2 = []
-		epgDown = epgShareDownload(self.session, True)
-		epgDown.setCallback(self.callbacks)
-		epgDown.start()
+		self.isEpgDownload = True
+		self.epgDown = epgShareDownload(self.session, True)
+		self.epgDown.setCallback(self.callbacks)
+		self.epgDown.start()
 
 	def keyLeft(self):
 		ConfigListScreen.keyLeft(self)
@@ -397,6 +410,8 @@ class epgSahreSetup(Screen, ConfigListScreen):
 		self.close()
 
 	def keyCancel(self):
+		if self.isEpgDownload:
+			self.epgDown.stop()
 		self.close()
 
 def autostart(reason, **kwargs):
