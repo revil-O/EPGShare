@@ -155,15 +155,23 @@ class epgShareDownload(threading.Thread):
 		refs = {}
 		refs['refs'] = getRefListJson()
 		data = requests.post("http://achansel.lima-city.de/download_epg.php", data=json.dumps(refs), timeout=60).text
-		events_list = []
-		try:
-			#colorprint("Antwort vom Server: %s" % str(data))
-			events = json.loads(data)['events']
-			colorprint("Antwort vom Server")
-			colorprint("Events: %d" % len(events))
-		except:
+		if re.search('EPG ist aktuell', data, re.S|re.I):
 			events = None
-			colorprint("Hole EPG Daten vom Server - Error")
+			if self.callback:
+				self.msgCallback("EPG ist aktuell.")
+				self.msgCallback("EPG Download beendet.")
+		else:
+			try:
+				#colorprint("Antwort vom Server: %s" % str(data))
+				events = json.loads(data)['events']
+				colorprint("Antwort vom Server")
+				colorprint("Events: %d" % len(events))
+			except:
+				events = None
+				colorprint("Fehler beim EPG Download !!!")
+				if self.callback:
+					self.msgCallback("Fehler beim EPG Download !!!")
+
 		if events is not None:
 			reflist = getRefList()
 			if len(reflist) > 0:
