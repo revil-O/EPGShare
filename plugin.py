@@ -302,7 +302,7 @@ class epgShare(Screen):
 		epgUp = epgShareUploader(self.session)
 		epgUp.start()
 
-class epgSahreSetup(Screen, ConfigListScreen):
+class epgShareSetup(Screen, ConfigListScreen):
 	skin = """
 		<screen name="EPG Share Setup" title="EPG Share Setup" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
@@ -443,7 +443,7 @@ def autostart(reason, **kwargs):
 			bg_timer.startTimer()
 
 def main(session, **kwargs):
-	session.open(epgSahreSetup)
+	session.open(epgShareSetup)
 
 def Plugins(path, **kwargs):
 	list = []
