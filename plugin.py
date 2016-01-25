@@ -51,16 +51,13 @@ def getSingleEventList(ref):
 	event = epgcache.lookupEvent(test)
 	return event
 
-
 def getServiceList(ref):
 	root = eServiceReference(str(ref))
 	serviceHandler = eServiceCenter.getInstance()
 	return serviceHandler.list(root).getContent("SN", True)
 
-
 def getTVBouquets():
 	return getServiceList(service_types_tv + ' FROM BOUQUET "bouquets.tv" ORDER BY bouquet')
-
 
 def getRefList():
 	l = []
@@ -70,7 +67,6 @@ def getRefList():
 		for (serviceref, servicename) in bouquetlist:
 			l.append(serviceref)
 	return l
-
 
 def getRefListJson(getextradata=False):
 	l = []
@@ -90,7 +86,6 @@ def getRefListJson(getextradata=False):
 			l.append({'ref': str(serviceref), 'time': lasteventtime})
 	return l
 
-
 def builFullChannellist():
 	allchannels = []
 	tvbouquets = getTVBouquets()
@@ -101,12 +96,10 @@ def builFullChannellist():
 				allchannels.append((servicename, serviceref))
 	return allchannels
 
-
 def fixTitle(title):
 	if title.lower() == "csi: ny":
 		title = "CSI: New York"
 	return title
-
 
 def getRefFromChannelName(channelname):
 	tvbouquets = getTVBouquets()
@@ -115,122 +108,6 @@ def getRefFromChannelName(channelname):
 		for (serviceref, servicename) in bouquetlist:
 			if channelname == servicename:
 				return serviceref
-
-
-def getWebChannels():
-	channeldb = {}
-	url = str(base64.b64decode('aHR0cDovL2NhcGkudHZtb3ZpZS5kZS92MS9jaGFubmVscy9ib3VxdWV0LzQxMDc0NTE/ZmllbGRzPWNoYW5uZWxJZCxjaGFubmVsTG9uZ05hbWUsY2hhbm5lbFNob3J0TmFtZQ=='))
-	headers = json.loads(str(base64.b64decode('eyJVc2VyLUFnZW50IjogIlRWIE1vdmllLzEyMiAoaVBob25lOyBpT1MgOS4xOyBTY2FsZS8yLjAwKSIsICJBY2NlcHQtTGFuZ3VhZ2UiOiAiZGUtREU7cT0xIiwgIkhvc3QiOiAiY2FwaS50dm1vdmllLmRlIiwgIlgtTmV3UmVsaWMtSUQiOiAiWEFZQlVWQmFHd1FHVVZoUkFBUT0ifQ==')))
-	program = json.loads(requests.get(url, headers=headers).text)
-	for channels in program:
-		for each in channels['channels']:
-			channelShortName = str(each['channelShortName']).lower().replace(' HD','').replace(' hd','').replace(' +','+')
-			channelLongName = str(each['channelLongName']).lower().replace(' HD','').replace(' hd','').replace(' +','+')
-			channel_id = str(each['channelId'])
-			if channelLongName != "":
-				if channelShortName != channelLongName:
-					channeldb[channelLongName] = channel_id
-			if channelShortName == "rtl ii":
-				channeldb["rtlii"] = channel_id
-				channeldb["rtl2"] = channel_id
-			elif channelShortName == "unichan":
-				channeldb["universal"] = channel_id
-			elif channelShortName == "prosieben fun":
-				channeldb["pro7 fun"] = channel_id
-			elif channelShortName == "sat.1gold":
-				channeldb["sat.1 gold"] = channel_id
-			elif channelShortName == "rtl nitro":
-				channeldb["rtlnitro"] = channel_id
-				channeldb["rtl nitro"] = channel_id
-			elif channelShortName == "b 3":
-				channeldb["br nord"] = channel_id
-				channeldb["br süd"] = channel_id
-				channeldb["bayerisches fs nord"] = channel_id
-				channeldb["bayerisches fs süd"] = channel_id
-			elif channelShortName == "h 3":
-				channeldb["hr-fernsehen"] = channel_id
-			elif channelShortName == "rbb":
-				channeldb["rbb brandenburg"] = channel_id
-				channeldb["rbb berlin"] = channel_id
-			elif channelShortName == "swr fernsehen":
-				channeldb["swr rp"] = channel_id
-				channeldb["swr bw"] = channel_id
-				channeldb["swr fernsehen bw"] = channel_id
-				channeldb["swr fernsehen rp"] = channel_id
-			elif channelShortName == "ndr":
-				channeldb["ndr fs sh"] = channel_id
-				channeldb["ndr fs hh"] = channel_id
-				channeldb["ndr fs mv"] = channel_id
-				channeldb["ndr fs nds"] = channel_id
-			elif channelShortName == "mdr":
-				channeldb["mdr s-anhalt"] = channel_id
-				channeldb["mdr sachsen"] = channel_id
-				channeldb["mdr thüringen"] = channel_id
-			elif channelShortName == "wdr":
-				channeldb["wdr aachen"] = channel_id
-				channeldb["wdr köln"] = channel_id
-				channeldb["wdr dortmund"] = channel_id
-				channeldb["wdr bielefeld"] = channel_id
-				channeldb["wdr bonn"] = channel_id
-				channeldb["wdr duisburg"] = channel_id
-				channeldb["wdr essen"] = channel_id
-				channeldb["wdr münster"] = channel_id
-				channeldb["wdr siegen"] = channel_id
-				channeldb["wdr wuppertal"] = channel_id
-				channeldb["wdr düsseldorf"] = channel_id
-			elif channelShortName == "zdf neo":
-				channeldb["zdf_neo"] = channel_id
-			elif channelShortName == "sonnenklar.tv":
-				channeldb["sonnenklar tv"] = channel_id
-			elif channelShortName == "national geographic":
-				channeldb["natgeo"] = channel_id
-				channeldb["national geographic"] = channel_id
-			elif channelShortName == "eurosport":
-				channeldb["eurosport 1"] = channel_id
-				channeldb["eurosport deutschland"] = channel_id
-			elif channelShortName == "sf 1":
-				channeldb["srf eins"] = channel_id
-			elif channelShortName == "sf 2":
-				channeldb["srf zwei"] = channel_id
-			elif channelShortName == "servustvd":
-				channeldb["servustv deutschland"] = channel_id
-				channeldb["servustv oesterreich"] = channel_id
-			elif channelShortName == "ki.ka":
-				channeldb["kika"] = channel_id
-			elif channelShortName == "orf 1":
-				channeldb["orf1"] = channel_id
-			elif channelShortName == "fox":
-				channeldb["fox serie"] = channel_id
-				channeldb["fox"] = channel_id
-			elif channelShortName == "orf 2":
-				channeldb["orf2"] = channel_id
-			elif channelShortName == "e! entertainment television":
-				channeldb["e! entertainm."] = channel_id
-			elif channelShortName == "nat geo wild":
-				channeldb["nat geo wild"] = channel_id
-				channeldb["natgeo wild"] = channel_id
-			elif channelShortName == "puls 4":
-				channeldb["puls 4 austria"] = channel_id
-			elif channelShortName == "nat geo wild":
-				channeldb["nat geo wild"] = channel_id
-			elif channelShortName == "tnt film":
-				channeldb["tnt film (tcm)"] = channel_id
-				channeldb["tnt film"] = channel_id
-			elif channelShortName == "axn":
-				channeldb["axn"] = channel_id
-				channeldb["axn action"] = channel_id
-			elif channelShortName == "ard alpha":
-				channeldb["ard-alpha"] = channel_id
-			elif channelShortName == "discovery channel":
-				channeldb["discovery"] = channel_id
-				channeldb["discovery channel"] = channel_id
-			elif channelShortName == "anixe":
-				channeldb["anixe"] = channel_id
-				channeldb["anixe sd"] = channel_id
-			else:
-				channeldb[channelShortName] = channel_id
-	return channeldb
-
 
 def colorprint(stringvalue):
 	if config.plugins.epgShare.debug.value:
@@ -271,9 +148,10 @@ class autoGetEpg():
 			else:
 				start_time += 1440 - now
 			self.Timer.start(start_time * 60 * 1000,True)
+			self.timerRunning = True
 			now = str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
+			colorprint("Auto EPG Update startet in %s std. um %s Uhr." % (str(config.plugins.epgShare.hours.value), str(now)))
 			return
-			colorprint("Auto EPG Update startet in %s std." % str(config.plugins.epgShare.hours.value))
 		else:
 			colorprint("Auto EPG Update ist nicht in den Einstellungen aktiviert.")
 
@@ -491,12 +369,85 @@ class epgShare(Screen):
 		epgUp.start()
 
 
+class epgShareScreen(Screen):
+	skin = """
+		<screen name="EPG Share" title="EPG Share" position="center,center" size="1280,720">
+			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
+			<widget name="list" position="10,60" size="1260,480" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+			<widget name="key_blue" position="1073,680" size="200,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+			<ePixmap position="59,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_red.png" alphatest="on" />
+			<ePixmap position="374,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_green.png" alphatest="on" />
+			<ePixmap position="726,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_yellow.png" alphatest="on" />
+			<ePixmap position="1037,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_blue.png" alphatest="on" />
+		</screen>"""
+
+	def __init__(self, session):
+		self.session = session
+		Screen.__init__(self, session)
+		self["actions"]  = ActionMap(["OkCancelActions", "ShortcutActions", "WizardActions", "ColorActions", "SetupActions", "NumberActions", "MenuActions", "EPGSelectActions"], {
+			"cancel":	self.keyCancel,
+			"red"	:	self.keyCancel,
+			"yellow" :	self.keyRun,
+			"blue"	:	self.keyConfig
+		}, -1)
+
+		self.chooseMenuList = MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
+		font, size = skin.parameters.get("EPGShareListFont", ('Regular', 20))
+		self.itemheight = int(skin.parameters.get("EPGShareListItemHeight", (38,))[0])
+		self.listwidth = int(skin.parameters.get("EPGShareListWidth", (1260,))[0])
+		self.chooseMenuList.l.setFont(0, gFont(font, int(size)))
+		self.chooseMenuList.l.setItemHeight(self.itemheight)
+		self.chooseMenuList.selectionEnabled(False)
+		self['info'] = Label(_("EPG Share"))
+		self['list'] = self.chooseMenuList
+		self['key_red'] = Label(_("Exit"))
+		self['key_green'] = Label(_(" "))
+		self['key_yellow'] = Label(_("EPG Download"))
+		self['key_blue'] = Label(_("Einstellungen"))
+		self.list = []
+		self.isEpgDownload = False
+
+	def callbacks(self, text):
+		if text == "EPG Download beendet.":
+			self.isEpgDownload = False
+		self.showInfo(text)
+
+	def showInfo(self, text):
+		try:
+			self.list.insert(0, text)
+			self.chooseMenuList.setList(map(self.showList, self.list))
+		except:
+			pass
+
+	def showList(self, entry):
+		return [entry,
+			(eListboxPythonMultiContent.TYPE_TEXT, 10, 0, self.listwidth - 20, self.itemheight, 0, RT_HALIGN_LEFT | RT_VALIGN_CENTER, entry)
+			]
+
+	def keyConfig(self):
+		self.session.open(epgShareSetup)
+
+	def keyRun(self):
+		self.list = []
+		self.isEpgDownload = True
+		self.epgDown = epgShareDownload(self.session, True)
+		self.epgDown.setCallback(self.callbacks)
+		self.epgDown.start()
+
+	def keyCancel(self):
+		if self.isEpgDownload:
+			self.isEpgDownload = False
+			self.epgDown.stop()
+		self.close()
+
 class epgShareSetup(Screen, ConfigListScreen):
 	skin = """
 		<screen name="EPG Share Setup" title="EPG Share Setup" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
-			<widget name="config" position="10,60" size="1260,120" font="Regular;22" textOffset="20,2" itemHeight="50" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
-			<widget name="list2" position="10,190" size="1260,480" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="config" position="10,60" size="1260,540" font="Regular;22" textOffset="20,2" itemHeight="50" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
 			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
@@ -514,27 +465,16 @@ class epgShareSetup(Screen, ConfigListScreen):
 			"cancel":	self.keyCancel,
 			"red"	:	self.keyCancel,
 			"green"	:	self.keySave,
-			"yellow":	self.keyRun,
 			"left"	:	self.keyLeft,
-			"right"	:	self.keyRight,
-			"nextBouquet" : self.listUP,
-			"prevBouquet" : self.listDown,
+			"right"	:	self.keyRight
 		}, -1)
-		self.chooseMenuList = MenuList([], enableWrapAround=True, content=eListboxPythonMultiContent)
-		font, size = skin.parameters.get("EPGShareListFont", ('Regular', 20))
-		self.itemheight = int(skin.parameters.get("EPGShareListItemHeight", (38,))[0])
-		self.listwidth = int(skin.parameters.get("EPGShareListWidth", (1260,))[0])
-		self.chooseMenuList.l.setFont(0, gFont(font, int(size)))
-		self.chooseMenuList.l.setItemHeight(self.itemheight)
-		self.chooseMenuList.selectionEnabled(False)
+
 		self['info'] = Label(_("EPG Share Einstellung"))
-		self['list2'] = self.chooseMenuList
-		self['key_red'] = Label("Exit")
-		self['key_green'] = Label(_("Speichern und verlassen"))
-		self['key_yellow'] = Label(_("EPG vom Server laden"))
+		self['key_red'] = Label(_("Cancel"))
+		self['key_green'] = Label(_("Save"))
+		self['key_yellow'] = Label(_(" "))
 		self['key_blue'] = Label("")
 		self.list = []
-		self.list2 = []
 		self.isEpgDownload = False
 		self.createConfigList()
 		ConfigListScreen.__init__(self, self.list)
@@ -554,30 +494,6 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.createConfigList()
 		self["config"].setList(self.list)
 
-	def callbacks(self, text):
-		if text == "EPG Download beendet.":
-			self.isEpgDownload = False
-		self.showInfo(text)
-
-	def showInfo(self, text):
-		try:
-			self.list2.insert(0, text)
-			self.chooseMenuList.setList(map(self.showList, self.list2))
-		except:
-			pass
-
-	def showList(self, entry):
-		return [entry,
-			(eListboxPythonMultiContent.TYPE_TEXT, 10, 0, self.listwidth - 20, self.itemheight, 0, RT_HALIGN_LEFT | RT_VALIGN_CENTER, entry)
-			]
-
-	def keyRun(self):
-		self.list2 = []
-		self.isEpgDownload = True
-		self.epgDown = epgShareDownload(self.session, True)
-		self.epgDown.setCallback(self.callbacks)
-		self.epgDown.start()
-
 	def keyLeft(self):
 		ConfigListScreen.keyLeft(self)
 		self.changedEntry()
@@ -586,14 +502,14 @@ class epgShareSetup(Screen, ConfigListScreen):
 		ConfigListScreen.keyRight(self)
 		self.changedEntry()
 
-	def listUP(self):
-		self['list2'].up()
-		
-	def listDown(self):
-		self['list2'].down()
-
 	def keySave(self):
 		global bg_timer
+		config.plugins.epgShare.auto.save()
+		config.plugins.epgShare.autorefreshtime.save()
+		config.plugins.epgShare.onstartup.save()
+		config.plugins.epgShare.onstartupdelay.save()
+		config.plugins.epgShare.useimprover.save()
+		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
 		configfile.save()
 		if config.plugins.epgShare.auto.value:
@@ -608,10 +524,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.close()
 
 	def keyCancel(self):
-		if self.isEpgDownload:
-			self.epgDown.stop()
 		self.close()
-
 
 def epgshare_init_shutdown():
 	if config.plugins.epgShare.auto.value:
@@ -654,10 +567,10 @@ def autostart(reason, **kwargs):
 			bg_timer.startTimer()
 
 def main(session, **kwargs):
-	session.open(epgShareSetup)
+	session.open(epgShareScreen)
 
 def Plugins(path, **kwargs):
 	list = []
 	list.append(PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART, PluginDescriptor.WHERE_AUTOSTART], fnc=autostart, wakeupfnc=epgshare_init_shutdown))
-	list.append(PluginDescriptor(name = ("EPG Share Setup"), description = ("EPG Service for your VU+"), where = PluginDescriptor.WHERE_PLUGINMENU, fnc = main))
+	list.append(PluginDescriptor(name = ("EPG Share"), description = ("EPG Service for your VU+"), where = PluginDescriptor.WHERE_PLUGINMENU, fnc = main))
 	return list
