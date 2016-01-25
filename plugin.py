@@ -43,6 +43,8 @@ config.plugins.epgShare.onstartupdelay = ConfigInteger(2, (1, 60))
 config.plugins.epgShare.debug = ConfigYesNo(default=False)
 config.plugins.epgShare.autorefreshtime = ConfigClock(default=6 * 3600)
 config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
+config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
+config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
 
 
 def getSingleEventList(ref):
@@ -217,10 +219,10 @@ class epgShareDownload(threading.Thread):
 		refs = {}
 		if config.plugins.epgShare.useimprover.value:
 			refs['refs'] = getRefListJson(getextradata=True)
-			data = requests.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php", data=json.dumps(refs), timeout=60).text
+			data = requests.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php", data=json.dumps(refs), timeout=180).text
 		else:
 			refs['refs'] = getRefListJson(getextradata=False)
-			data = requests.post("http://timeforplanb.linevast-hosting.in/download_epg.php", data=json.dumps(refs), timeout=60).text
+			data = requests.post("http://timeforplanb.linevast-hosting.in/download_epg.php", data=json.dumps(refs), timeout=180).text
 		if re.search('EPG ist aktuell', data, re.S|re.I):
 			events = None
 			if self.callback:
@@ -254,7 +256,26 @@ class epgShareDownload(threading.Thread):
 							if event['extradata'] is None:
 								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
 							else:
-								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), "%s \n<x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
+								title = str(event['title'])
+								if config.plugins.epgShare.titleSeasonEpisode.value:
+									extradata = json.loads(event['extradata'])
+									if 'categoryName' in str(extradata):
+										if 'Serie' in str(extradata):
+											if 'season' and 'episode' in str(extradata):
+												season = str(extradata['season'])
+												episode = str(extradata['episode'])
+												if season and episode != '':
+													if int(season) < 10:
+														season = "S0"+str(season)
+													else:
+														season = "S"+str(season)
+													if int(episode) < 10:
+														episode = "E0"+str(episode)
+													else:
+														episode = "E"+str(episode)
+													title = "%s - %s%s" % (title, season, episode)
+											
+								events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s \n<x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
 						else:
 							colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 							if self.callback:
@@ -264,7 +285,26 @@ class epgShareDownload(threading.Thread):
 							if event['extradata'] is None:
 								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
 							else:
-								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), "%s <x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
+								title = str(event['title'])
+								if config.plugins.epgShare.titleSeasonEpisode.value:
+									extradata = json.loads(event['extradata'])
+									if 'categoryName' in str(extradata):
+										if 'Serie' in str(extradata):
+											if 'season' and 'episode' in str(extradata):
+												season = str(extradata['season'])
+												episode = str(extradata['episode'])
+												if season and episode != '':
+													if int(season) < 10:
+														season = "S0"+str(season)
+													else:
+														season = "S"+str(season)
+													if int(episode) < 10:
+														episode = "E0"+str(episode)
+													else:
+														episode = "E"+str(episode)
+													title = "%s - %s%s" % (title, season, episode)
+
+								events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s <x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
 						last_channel_ref = str(event['channel_ref'])
 						last_channel_name = str(event['channel_name'])
 						count_refs += 1
@@ -488,6 +528,8 @@ class epgShareSetup(Screen, ConfigListScreen):
 		if config.plugins.epgShare.onstartup.value:
 			self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen nach x Minuten"), config.plugins.epgShare.onstartupdelay))
 		self.list.append(getConfigListEntry(_("EPG mit Extradaten verbessern"), config.plugins.epgShare.useimprover))
+		if config.plugins.epgShare.useimprover.value:
+			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
 		self.list.append(getConfigListEntry(_("Debug Ausgabe aktivieren"), config.plugins.epgShare.debug))
 
 	def changedEntry(self):
@@ -508,6 +550,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.autorefreshtime.save()
 		config.plugins.epgShare.onstartup.save()
 		config.plugins.epgShare.onstartupdelay.save()
+		config.plugins.epgShare.titleSeasonEpisode.save()
 		config.plugins.epgShare.useimprover.save()
 		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
