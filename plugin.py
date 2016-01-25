@@ -373,7 +373,7 @@ class epgShareScreen(Screen):
 	skin = """
 		<screen name="EPG Share" title="EPG Share" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
-			<widget name="list" position="10,60" size="1260,480" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="list" position="10,80" size="1260,570" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
 			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
@@ -401,7 +401,7 @@ class epgShareScreen(Screen):
 		self.chooseMenuList.l.setFont(0, gFont(font, int(size)))
 		self.chooseMenuList.l.setItemHeight(self.itemheight)
 		self.chooseMenuList.selectionEnabled(False)
-		self['info'] = Label(_("EPG Share"))
+		self['info'] = Label(_("Info"))
 		self['list'] = self.chooseMenuList
 		self['key_red'] = Label(_("Exit"))
 		self['key_green'] = Label(_(" "))
@@ -447,7 +447,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 	skin = """
 		<screen name="EPG Share Setup" title="EPG Share Setup" position="center,center" size="1280,720">
 			<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
-			<widget name="config" position="10,60" size="1260,540" font="Regular;22" textOffset="20,2" itemHeight="50" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+			<widget name="config" position="10,80" size="1260,570" font="Regular;22" textOffset="20,2" itemHeight="50" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
 			<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
 			<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
