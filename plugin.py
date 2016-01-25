@@ -280,7 +280,7 @@ class epgShareDownload(threading.Thread):
 							colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 							if self.callback:
 								self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-							self.epgcache.importEventswithID(last_channel_ref, events_list)
+							self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
 							events_list = []
 							if event['extradata'] is None:
 								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
@@ -310,7 +310,7 @@ class epgShareDownload(threading.Thread):
 						count_refs += 1
 
 				if int(count_refs) == int(count_refs):
-					self.epgcache.importEventswithID(last_channel_ref, events_list)
+					self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
 					colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
 					colorprint("EPG Download beendet.")
 					if self.callback:
