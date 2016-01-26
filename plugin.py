@@ -67,25 +67,29 @@ def getRefList():
 	for bouquet in tvbouquets:
 		bouquetlist = getServiceList(bouquet[0])
 		for (serviceref, servicename) in bouquetlist:
-			l.append(serviceref)
+			if not serviceref in l:
+				l.append(serviceref)
 	return l
 
 def getRefListJson(getextradata=False):
+	refs = []
 	l = []
 	tvbouquets = getTVBouquets()
 	for bouquet in tvbouquets:
 		bouquetlist = getServiceList(bouquet[0])
 		for (serviceref, servicename) in bouquetlist:
-			if getextradata:
-				lasteventtime = 0
-			else:
-				try:
-					lastevent = eEPGCache.getInstance().lookupEvent(["IB", (str(serviceref), 3)])
-					(event_id, starttime) = lastevent[0]
-					lasteventtime = starttime
-				except:
+			if not serviceref in refs:
+				refs.append(serviceref)
+				if getextradata:
 					lasteventtime = 0
-			l.append({'ref': str(serviceref), 'time': lasteventtime})
+				else:
+					try:
+						lastevent = eEPGCache.getInstance().lookupEvent(["IB", (str(serviceref), 3)])
+						(event_id, starttime) = lastevent[0]
+						lasteventtime = starttime
+					except:
+						lasteventtime = 0
+				l.append({'ref': str(serviceref), 'time': lasteventtime})
 	return l
 
 def builFullChannellist():
