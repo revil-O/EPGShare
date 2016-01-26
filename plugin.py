@@ -335,14 +335,15 @@ class epgShareUploader(threading.Thread):
 			if info is not None:
 				(channel_name, channel_ref) = info
 				colorprint("%s %s" % (channel_name, channel_ref))
-				test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1) ]
+				test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
 				dvb_events = []
 				count_dvb_events = 0
 				dvb_events_real = []
 				count_dvb_events_real = 0
 				dvb_events = self.epgcache.lookupEvent(test)
 				count_dvb_events = str(len(dvb_events))
-				dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE'], dvb_events)
+				dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
+				#dvb_events_real = dvb_events
 				count_dvb_events_real = str(len(dvb_events_real))
 				colorprint("Count %s from %s Events" % (count_dvb_events_real, count_dvb_events))
 				if len(dvb_events_real) > 0:
