@@ -451,7 +451,7 @@ class epgShare(Screen):
 								cur_ref.getUnsignedData(4),
 								cur_ref.getUnsignedData(2),
 								cur_ref.getUnsignedData(3),
-								self.service_types[pos+1:])
+								service_types_tv[pos+1:])
 			ref = eServiceReference(refstr)
 			bouquetlist = getServiceList(ref)
 			for (serviceref, servicename) in bouquetlist:
