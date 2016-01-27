@@ -45,7 +45,7 @@ config.plugins.epgShare.autorefreshtime = ConfigClock(default=6 * 3600)
 config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
 config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
 config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
-config.plugins.epgShare.sendTransponder = ConfigYesNo(default=False)
+config.plugins.epgShare.sendTransponder = ConfigYesNo(default=True)
 
 def getSingleEventList(ref):
 	epgcache = eEPGCache.getInstance()
@@ -343,54 +343,55 @@ class epgShareUploader(threading.Thread):
 		while not self.stopped:
 			if not self.channelqueue.empty():
 				while not self.channelqueue.empty():
-					channel_ref = None
-					try:
-						info = self.channelqueue.get()
-						if info:
-							(channel_name, channel_ref) = info
-							colorprint("%s %s" % (channel_name, channel_ref))
-							test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
-							dvb_events = []
-							count_dvb_events = 0
-							dvb_events_real = []
-							count_dvb_events_real = 0
-							dvb_events = self.epgcache.lookupEvent(test)
-							count_dvb_events = len(dvb_events)
-							time.sleep(1)
-							colorprint("Checking Eventcount")
-							while len(self.epgcache.lookupEvent(test)) > count_dvb_events:
-								colorprint("Eventcount is increasing")
-								colorprint("Waiting 1 Second")
-								time.sleep(1)
+					if not self.stopped:
+						channel_ref = None
+						try:
+							info = self.channelqueue.get()
+							if info:
+								(channel_name, channel_ref) = info
+								colorprint("%s %s" % (channel_name, channel_ref))
+								test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
+								dvb_events = []
+								count_dvb_events = 0
+								dvb_events_real = []
+								count_dvb_events_real = 0
 								dvb_events = self.epgcache.lookupEvent(test)
 								count_dvb_events = len(dvb_events)
-							colorprint("Eventcount is not increasing... not Channelupdate running")
-							dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
-							count_dvb_events_real = str(len(dvb_events_real))
-							colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
-							if len(dvb_events_real) > 0:
-								postdata = []
-								for event in dvb_events_real:
-									(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
-									ev = {}
-									ev['event_id'] = str(event_id)
-									ev['addtime'] = str(int(time.time()))
-									ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
-									ev['channel_ref'] = str(channel_ref)
-									ev['starttime'] = str(starttime)
-									ev['duration'] = str(duration)
-									ev['title'] = str(title)
-									ev['subtitle'] = str(subtitle)
-									ev['handlung'] = str(handlung)
-									postdata.append(ev)
-								requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-								post = {'events': json.dumps(postdata)}
-								colorprint(str(requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text))
+								time.sleep(1)
+								colorprint("Checking Eventcount")
+								while len(self.epgcache.lookupEvent(test)) > count_dvb_events:
+									colorprint("Eventcount is increasing")
+									colorprint("Waiting 1 Second")
+									time.sleep(1)
+									dvb_events = self.epgcache.lookupEvent(test)
+									count_dvb_events = len(dvb_events)
+								colorprint("Eventcount is not increasing... not Channelupdate running")
+								dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
+								count_dvb_events_real = str(len(dvb_events_real))
+								colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
+								if len(dvb_events_real) > 0:
+									postdata = []
+									for event in dvb_events_real:
+										(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
+										ev = {}
+										ev['event_id'] = str(event_id)
+										ev['addtime'] = str(int(time.time()))
+										ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
+										ev['channel_ref'] = str(channel_ref)
+										ev['starttime'] = str(starttime)
+										ev['duration'] = str(duration)
+										ev['title'] = str(title)
+										ev['subtitle'] = str(subtitle)
+										ev['handlung'] = str(handlung)
+										postdata.append(ev)
+									requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+									post = {'events': json.dumps(postdata)}
+									colorprint(str(requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text))
 
-					except Exception, ex:
-						colorprint("Grab Channel EPG - Error: %s" % str(ex))
-					if channel_ref:
-						self.queuelist.remove(channel_ref)
+						except Exception, ex:
+							colorprint("Grab Channel EPG - Error: %s" % str(ex))
+						if channel_ref:
+							self.queuelist.remove(channel_ref)
 			time.sleep(1)
 
 
@@ -456,7 +457,6 @@ class epgShare(Screen):
 				self.epgUp.addChannel([servicename, serviceref])
 		else:
 			self.epgUp.addChannel(self.getChannelNameRef())
-
 
 	def getChannelNameRef(self):
 		service = self.session.nav.getCurrentService()
@@ -560,7 +560,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 	def __init__(self, session):
 		self.session = session
 		Screen.__init__(self, session)
-		self["actions"]  = ActionMap(["OkCancelActions", "ShortcutActions", "WizardActions", "ColorActions", "SetupActions", "NumberActions", "MenuActions", "EPGSelectActions"], {
+		self["actions"] = ActionMap(["OkCancelActions", "ShortcutActions", "WizardActions", "ColorActions", "SetupActions", "NumberActions", "MenuActions", "EPGSelectActions"], {
 			"cancel":	self.keyCancel,
 			"red"	:	self.keyCancel,
 			"green"	:	self.keySave,
@@ -580,7 +580,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 
 	def createConfigList(self):
 		self.list = []
-		self.list.append(getConfigListEntry(_("Transponder EPG hochladen"), config.plugins.epgShare.sendTransponder))
+		#self.list.append(getConfigListEntry(_("Transponder EPG hochladen"), config.plugins.epgShare.sendTransponder))
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Uhrzeit"), config.plugins.epgShare.autorefreshtime))
@@ -631,7 +631,11 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.close()
 
 def epgshare_init_shutdown():
+	colorprint("Initializing Shutdown")
 	global updateservice
+	updateservice.epgUp.stopme()
+	updateservice.epgUp = None
+
 	updateservice.close()
 	if config.plugins.epgShare.auto.value:
 		now = time.localtime()
