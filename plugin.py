@@ -45,7 +45,7 @@ config.plugins.epgShare.autorefreshtime = ConfigClock(default=6 * 3600)
 config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
 config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
 config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
-
+config.plugins.epgShare.sendTransponder = ConfigYesNo(default=False)
 
 def getSingleEventList(ref):
 	epgcache = eEPGCache.getInstance()
@@ -329,47 +329,75 @@ class epgShareUploader(threading.Thread):
 
 	def __init__(self, session):
 		self.session = session
+		self.stopped = False
+		self.channelqueue = Queue()
+		self.queuelist = []
 		self.epgcache = eEPGCache.getInstance()
 		threading.Thread.__init__(self)
 
+	def stopme(self):
+		self.stopped = True
+
 	def run(self):
 		colorprint("Grab Channel EPG")
-		try:
-			info = self.getChannelNameRef()
-			if info is not None:
-				(channel_name, channel_ref) = info
-				colorprint("%s %s" % (channel_name, channel_ref))
-				test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
-				dvb_events = []
-				count_dvb_events = 0
-				dvb_events_real = []
-				count_dvb_events_real = 0
-				dvb_events = self.epgcache.lookupEvent(test)
-				count_dvb_events = str(len(dvb_events))
-				dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
-				#dvb_events_real = dvb_events
-				count_dvb_events_real = str(len(dvb_events_real))
-				colorprint("Count %s from %s Events" % (count_dvb_events_real, count_dvb_events))
-				if len(dvb_events_real) > 0:
-					postdata = []
-					for event in dvb_events_real:
-						(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
-						ev = {}
-						ev['event_id'] = str(event_id)
-						ev['addtime'] = str(int(time.time()))
-						ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
-						ev['channel_ref'] = str(channel_ref)
-						ev['starttime'] = str(starttime)
-						ev['duration'] = str(duration)
-						ev['title'] = str(title)
-						ev['subtitle'] = str(subtitle)
-						ev['handlung'] = str(handlung)
-						postdata.append(ev)
-					requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-					post = {'events': json.dumps(postdata)}
-					print requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text
-		except:
-			colorprint("Grab Channel EPG - Error")
+		while not self.stopped:
+			if not self.channelqueue.empty():
+				while not self.channelqueue.empty():
+					channel_ref = None
+					try:
+						info = self.channelqueue.get()
+						if info:
+							(channel_name, channel_ref) = info
+							colorprint("%s %s" % (channel_name, channel_ref))
+							test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
+							dvb_events = []
+							count_dvb_events = 0
+							dvb_events_real = []
+							count_dvb_events_real = 0
+							dvb_events = self.epgcache.lookupEvent(test)
+							count_dvb_events = len(dvb_events)
+							time.sleep(1)
+							colorprint("Checking Eventcount")
+							while len(self.epgcache.lookupEvent(test)) > count_dvb_events:
+								colorprint("Eventcount is increasing")
+								colorprint("Waiting 1 Second")
+								time.sleep(1)
+								dvb_events = self.epgcache.lookupEvent(test)
+								count_dvb_events = len(dvb_events)
+							colorprint("Eventcount is not increasing... not Channelupdate running")
+							dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
+							count_dvb_events_real = str(len(dvb_events_real))
+							colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
+							if len(dvb_events_real) > 0:
+								postdata = []
+								for event in dvb_events_real:
+									(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
+									ev = {}
+									ev['event_id'] = str(event_id)
+									ev['addtime'] = str(int(time.time()))
+									ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
+									ev['channel_ref'] = str(channel_ref)
+									ev['starttime'] = str(starttime)
+									ev['duration'] = str(duration)
+									ev['title'] = str(title)
+									ev['subtitle'] = str(subtitle)
+									ev['handlung'] = str(handlung)
+									postdata.append(ev)
+								requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+								post = {'events': json.dumps(postdata)}
+								colorprint(str(requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text))
+
+					except Exception, ex:
+						colorprint("Grab Channel EPG - Error: %s" % str(ex))
+					if channel_ref:
+						self.queuelist.remove(channel_ref)
+			time.sleep(1)
+
+
+	def addChannel(self, channel):
+		if not channel[1] in self.queuelist:
+			self.queuelist.append(channel[1])
+			self.channelqueue.put(channel)
 
 	def getChannelNameRef(self):
 		service = self.session.nav.getCurrentService()
@@ -390,11 +418,13 @@ class epgShare(Screen):
 			iPlayableService.evUpdatedInfo: self.__evUpdatedInfo,
 			iPlayableService.evStart: self.__evStart
 		})
-
 		self.Timer = eTimer()
 		self.Timer.callback.append(self.delaytimer)
 		self.container = None
 		self.newService = False
+		self.epgUp = epgShareUploader(self.session)
+		self.epgUp.start()
+		self.onClose.append(self.__onClose)
 
 	def __evStart(self):
 		self.newService = True
@@ -408,10 +438,36 @@ class epgShare(Screen):
 			except:
 				pass
 
+	def __onClose(self):
+		self.epgUp.stopme()
+		self.epgUp = None
+
 	def delaytimer(self):
 		self.Timer.stop()
-		epgUp = epgShareUploader(self.session)
-		epgUp.start()
+		if config.plugins.epgShare.sendTransponder.value:
+			cur_ref = self.session.nav.getCurrentlyPlayingServiceReference()
+			pos = service_types_tv.rfind(':')
+			refstr = '%s (channelID == %08x%04x%04x) && %s ORDER BY name' % (service_types_tv[:pos+1],
+								cur_ref.getUnsignedData(4),
+								cur_ref.getUnsignedData(2),
+								cur_ref.getUnsignedData(3),
+								self.service_types[pos+1:])
+			ref = eServiceReference(refstr)
+			bouquetlist = getServiceList(ref)
+			for (serviceref, servicename) in bouquetlist:
+				self.epgUp.addChannel([servicename, serviceref])
+		else:
+			self.epgUp.addChannel(self.getChannelNameRef())
+
+
+	def getChannelNameRef(self):
+		service = self.session.nav.getCurrentService()
+		service_ref = self.session.nav.getCurrentlyPlayingServiceReference().toString().replace(str(self.session.nav.getCurrentlyPlayingServiceReference().getPath()), "")
+		if service and service is not None:
+			service_name = service.info().getName()
+			return [service_name, service_ref]
+		else:
+			return None
 
 
 class epgShareScreen(Screen):
@@ -526,6 +582,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 
 	def createConfigList(self):
 		self.list = []
+		self.list.append(getConfigListEntry(_("Transponder EPG hochladen"), config.plugins.epgShare.sendTransponder))
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Uhrzeit"), config.plugins.epgShare.autorefreshtime))
@@ -557,6 +614,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.onstartupdelay.save()
 		config.plugins.epgShare.titleSeasonEpisode.save()
 		config.plugins.epgShare.useimprover.save()
+		config.plugins.epgShare.sendTransponder.save()
 		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
 		configfile.save()
@@ -575,6 +633,8 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.close()
 
 def epgshare_init_shutdown():
+	global updateservice
+	updateservice.close()
 	if config.plugins.epgShare.auto.value:
 		now = time.localtime()
 		current_time = int(time.time())
@@ -600,7 +660,8 @@ def autostart(reason, **kwargs):
 	if "session" in kwargs:
 		session = kwargs["session"]
 		# Starte Upload Service
-		epgShare(session)
+		global updateservice
+		updateservice = epgShare(session)
 		# Hole EPG Daten vom Server beim e2 neustart mit delay
 		if config.plugins.epgShare.onstartup.value:
 			delayEpgDownload(session)
