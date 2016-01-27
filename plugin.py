@@ -452,9 +452,7 @@ class epgShare(Screen):
 								cur_ref.getUnsignedData(2),
 								cur_ref.getUnsignedData(3),
 								service_types_tv[pos+1:])
-			ref = eServiceReference(refstr)
-			bouquetlist = getServiceList(refstr)
-			for (serviceref, servicename) in bouquetlist:
+			for (serviceref, servicename) in getServiceList(refstr):
 				self.epgUp.addChannel([servicename, serviceref])
 		else:
 			self.epgUp.addChannel(self.getChannelNameRef())
