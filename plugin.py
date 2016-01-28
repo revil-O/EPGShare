@@ -398,7 +398,7 @@ class epgShareUploader(threading.Thread):
 									dvb_events = self.epgcache.lookupEvent(test)
 									count_dvb_events = len(dvb_events)
 								colorprint("Eventcount is not increasing... not Channelupdate running")
-								dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE'], dvb_events)
+								dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
 								count_dvb_events_real = str(len(dvb_events_real))
 								colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
 								if len(dvb_events_real) > 0:
@@ -621,9 +621,9 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Uhrzeit"), config.plugins.epgShare.autorefreshtime))
-		self.list.append(getConfigListEntry(_("Beim Enigma2 start EPG automatisch vom Server holen"), config.plugins.epgShare.onstartup))
-		if config.plugins.epgShare.onstartup.value:
-			self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen nach x Minuten"), config.plugins.epgShare.onstartupdelay))
+		#self.list.append(getConfigListEntry(_("Beim Enigma2 start EPG automatisch vom Server holen"), config.plugins.epgShare.onstartup))
+		#if config.plugins.epgShare.onstartup.value:
+		#	self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen nach x Minuten"), config.plugins.epgShare.onstartupdelay))
 		self.list.append(getConfigListEntry(_("EPG mit Extradaten verbessern"), config.plugins.epgShare.useimprover))
 		if config.plugins.epgShare.useimprover.value:
 			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
