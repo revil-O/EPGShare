@@ -25,7 +25,7 @@ from Tools.Directories import pathExists, fileExists
 from Tools.BoundFunction import boundFunction
 from threading import Thread
 import threading, re, os, requests, json
-from urllib import quote, unquote_plus, unquote, urlencode, time
+from urllib import quote, unquote_plus, unquote, urlencode, time, quote_plus
 import base64
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from datetime import datetime, timedelta
@@ -38,14 +38,13 @@ from pyDes import *
 def getkeychallenge():
     k = triple_des((str(uuid.getnode()) * 2)[0:24], CBC, "\0\0\0\0\0\0\0\0", padmode=PAD_PKCS5)
     d = k.encrypt(open(base64.b64decode("L3N5cy9jbGFzcy9uZXQvZXRoMC9hZGRyZXNz"), "r").readline().strip())
-    return base64.b64encode(d)
+    return quote_plus(base64.b64encode(d))
 
 def getpayload(session):
-	url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s" % str(getkeychallenge())
-	colorprint(url)
+	key = str(getkeychallenge())
+	url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s" % key
 	payload = session.get(url, timeout=10).text
 	if payload != '':
-		colorprint("PAYLOADRECEIVED: %s" % str(payload))
 		return json.loads(payload)
 	else:
 		return None
@@ -237,7 +236,6 @@ class epgShareDownload(threading.Thread):
 	def run(self):
 		s = requests.Session()
 		p = getpayload(s)
-		userid = p['payloaddata'][0]['userid']
 		payload = p['payloaddata'][0]['payload']
 		sessionkey = p['payloaddata'][0]['sessionkey']
 		if payload > 0 and str(sessionkey) != '':
