@@ -478,22 +478,25 @@ class epgShare(Screen):
 
 	def delaytimer(self):
 		self.Timer.stop()
-		if config.plugins.epgShare.sendTransponder.value:
-			cur_ref = self.session.nav.getCurrentlyPlayingServiceReference()
-			pos = service_types_tv.rfind(':')
+		try:
+			if config.plugins.epgShare.sendTransponder.value:
+				cur_ref = self.session.nav.getCurrentlyPlayingServiceReference()
+				pos = service_types_tv.rfind(':')
 
-			refstr = '%s (channelID == %08x%04x%04x) && %s ORDER BY name' % (service_types_tv[:pos+1],
-								cur_ref.getUnsignedData(4),
-								cur_ref.getUnsignedData(2),
-								cur_ref.getUnsignedData(3),
-								service_types_tv[pos+1:])
-			if refstr in self.transcache:
-				pass
-				##
-			for (serviceref, servicename) in getServiceList(refstr):
-				self.epgUp.addChannel([servicename, serviceref])
-		else:
-			self.epgUp.addChannel(self.getChannelNameRef())
+				refstr = '%s (channelID == %08x%04x%04x) && %s ORDER BY name' % (service_types_tv[:pos+1],
+									cur_ref.getUnsignedData(4),
+									cur_ref.getUnsignedData(2),
+									cur_ref.getUnsignedData(3),
+									service_types_tv[pos+1:])
+				if refstr in self.transcache:
+					pass
+					##
+				for (serviceref, servicename) in getServiceList(refstr):
+					self.epgUp.addChannel([servicename, serviceref])
+			else:
+				self.epgUp.addChannel(self.getChannelNameRef())
+		except:
+			pass
 
 	def getChannelNameRef(self):
 		service = self.session.nav.getCurrentService()
