@@ -7,6 +7,7 @@ from Components.config import config, getConfigListEntry, ConfigSelection, Confi
 from Components.ServiceEventTracker import ServiceEventTracker
 from Components.ActionMap import ActionMap
 from Components.Label import Label
+from Screens.SessionGlobals import SessionGlobals
 from Components.Sources.StaticText import StaticText
 from Components.MenuList import MenuList
 from enigma import iPlayableService, iServiceInformation, eTimer, eConsoleAppContainer, gFont, addFont, loadPNG, eListboxPythonMultiContent, RT_HALIGN_LEFT, RT_HALIGN_RIGHT, RT_HALIGN_CENTER, RT_VALIGN_CENTER, eLabel, eWidget, eSlider, fontRenderClass, ePoint, eSize, eDBoxLCD, ePicLoad, gPixmapPtr, eEPGCache
@@ -29,6 +30,19 @@ from urllib import quote, unquote_plus, unquote, urlencode, time, quote_plus
 import base64
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from datetime import datetime, timedelta
+from Tools import Notifications
+from Screens.Screen import Screen
+from Components.Sources.CurrentService import CurrentService
+from Components.Sources.EventInfo import EventInfo
+from Components.Sources.FrontendStatus import FrontendStatus
+from Components.Sources.FrontendInfo import FrontendInfo
+from Components.Sources.Source import Source
+from Components.Sources.TunerInfo import TunerInfo
+from Components.Sources.Boolean import Boolean
+from Components.Sources.RecordState import RecordState
+from Components.Converter.Combine import Combine
+from Components.Renderer.FrontpanelLed import FrontpanelLed
+from Components.Sources.extEventInfo import extEventInfo
 from os.path import splitext, basename
 from urlparse import urlparse
 import skin
@@ -47,13 +61,14 @@ def getpayload(session):
 	else:
 		url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s" % key
 	payload = session.get(url, timeout=10).text
-	if payload != '':
+	try:
 		return json.loads(payload)
-	else:
-		return None
+	except:
+		return payload
 
 epgDownloadThread = None
 updatethread = None
+eventinfo_orig = None
 
 config.plugins.epgShare = ConfigSubsection()
 config.plugins.epgShare.auto = ConfigYesNo(default=True)
@@ -67,7 +82,8 @@ config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
 config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
 config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
 config.plugins.epgShare.sendTransponder = ConfigYesNo(default=True)
-config.plugins.epgShare.supporterKey = ConfigText(default="")
+config.plugins.epgShare.supporterKey = ConfigText(default="", fixed_size=False)
+config.plugins.epgShare.lastupdate = ConfigText(default="", fixed_size=False)
 
 def getSingleEventList(ref):
 	epgcache = eEPGCache.getInstance()
@@ -198,10 +214,17 @@ class autoGetEpg():
 		if epgDownloadThread is None:
 			epgDownloadThread = epgShareDownload(self.session)
 			epgDownloadThread.start()
+			Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
+                                   MessageBox.TYPE_INFO,
+                                   5)
 		else:
 			if not epgDownloadThread.isRunning:
+				epgDownloadThread = None
+				epgDownloadThread = epgShareDownload(self.session)
 				epgDownloadThread.start()
-
+				Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
+                                   MessageBox.TYPE_INFO,
+                                   5)
 
 class delayEpgDownload():
 
@@ -224,10 +247,11 @@ class delayEpgDownload():
 
 class epgShareDownload(threading.Thread):
 
-	def __init__(self, session, callback=False):
+	def __init__(self, session, callback=False, autoupdate=False):
 		self.session = session
 		self.callback = callback
 		self.callback_infos = None
+		self.autoupdate = autoupdate
 		self.isRunning = False
 		self.epgcache = eEPGCache.getInstance()
 		threading.Thread.__init__(self)
@@ -241,130 +265,179 @@ class epgShareDownload(threading.Thread):
 
 	def stop(self):
 		self.isRunning = False
+		global epgDownloadThread
+		epgDownloadThread = None
 
 	def run(self):
 		s = requests.Session()
 		p = getpayload(s)
-		payload = p['payloaddata'][0]['payload']
-		sessionkey = p['payloaddata'][0]['sessionkey']
-		if payload > 0 and str(sessionkey) != '':
-			self.isRunning = True
-			colorprint("Hole EPG Daten vom Server")
-			self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
-			requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-			refs = {}
-			if config.plugins.epgShare.useimprover.value:
-				refs['refs'] = getRefListJson(getextradata=True)
-				data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php?sessionkey=" + sessionkey, data=json.dumps(refs), timeout=180).text
-			else:
-				refs['refs'] = getRefListJson(getextradata=False)
-				data = s.post("http://timeforplanb.linevast-hosting.in/download_epg.php?sessionkey=" + sessionkey , data=json.dumps(refs), timeout=180).text
-			if re.search('EPG ist aktuell', data, re.S|re.I):
-				events = None
-				if self.callback:
-					self.msgCallback("EPG ist aktuell.")
-					self.msgCallback("EPG Download beendet.")
-			elif re.search('No Valid Session found', data, re.S|re.I):
-				events = None
-				if self.callback:
-					self.msgCallback("Session Fehler.")
-			else:
-				try:
-					events = json.loads(data)['events']
-					colorprint("Antwort vom Server")
-					colorprint("Events: %d" % len(events))
-				except Exception, ex:
-					events = None
-					colorprint("Fehler beim EPG Download !!!")
-					if self.callback:
-						self.msgCallback("Fehler beim EPG Download %s" % str(ex))
-			if events is not None:
-				reflist = getRefList()
-				if len(reflist) > 0:
-					last_channel_name = ''
-					last_channel_ref = ''
-					channels = []
-					events_list = []
-					count_refs = len(events)
-					for event in events:
-						if not self.isRunning:
-							break
-						if str(event['channel_ref']) in reflist:
-							if str(event['channel_ref']) not in channels:
-								channels.append(str(event['channel_ref']))
-							if last_channel_ref in [str(event['channel_ref']), '']:
-								if event['extradata'] is None:
-									events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
-								else:
-									title = str(event['title'])
-									if config.plugins.epgShare.titleSeasonEpisode.value:
-										extradata = json.loads(event['extradata'])
-										if 'categoryName' in str(extradata):
-											if 'Serie' in str(extradata):
-												if 'season' and 'episode' in str(extradata):
-													season = str(extradata['season'])
-													episode = str(extradata['episode'])
-													if season and episode != '':
-														if int(season) < 10:
-															season = "S0"+str(season)
-														else:
-															season = "S"+str(season)
-														if int(episode) < 10:
-															episode = "E0"+str(episode)
-														else:
-															episode = "E"+str(episode)
-														title = "%s - %s%s" % (title, season, episode)
-
-									events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s \n<x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
-							else:
-								colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-								if self.callback:
-									self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-								self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
-								events_list = []
-								if event['extradata'] is None:
-									events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
-								else:
-									title = str(event['title'])
-									if config.plugins.epgShare.titleSeasonEpisode.value:
-										extradata = json.loads(event['extradata'])
-										if 'categoryName' in str(extradata):
-											if 'Serie' in str(extradata):
-												if 'season' and 'episode' in str(extradata):
-													season = str(extradata['season'])
-													episode = str(extradata['episode'])
-													if season and episode != '':
-														if int(season) < 10:
-															season = "S0"+str(season)
-														else:
-															season = "S"+str(season)
-														if int(episode) < 10:
-															episode = "E0"+str(episode)
-														else:
-															episode = "E"+str(episode)
-														title = "%s - %s%s" % (title, season, episode)
-
-									events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s <x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
-							last_channel_ref = str(event['channel_ref'])
-							last_channel_name = str(event['channel_name'])
-							count_refs += 1
-
-					if int(count_refs) == int(count_refs):
-						self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
-						colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-						colorprint("EPG Download beendet.")
-						self.epgcache.save()
-						if self.callback:
-							self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-							self.msgCallback("EPG Download beendet.")
+		if isinstance(p, dict):
+			payload = p['payloaddata'][0]['payload']
+			sessionkey = p['payloaddata'][0]['sessionkey']
+			if payload > 0 and str(sessionkey) != '':
+				self.isRunning = True
+				colorprint("Hole EPG Daten vom Server")
+				self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
+				requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+				refs = {}
+				if config.plugins.epgShare.useimprover.value:
+					refs['refs'] = getRefListJson(getextradata=True)
+					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php?sessionkey=" + sessionkey, data=json.dumps(refs), timeout=180).text
 				else:
-					colorprint("Keine reflist vorhanden.")
-			self.isRunning = False
+					refs['refs'] = getRefListJson(getextradata=False)
+					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg.php?sessionkey=" + sessionkey , data=json.dumps(refs), timeout=180).text
+				if re.search('EPG ist aktuell', data, re.S|re.I):
+					events = None
+					if self.callback:
+						self.msgCallback("EPG ist aktuell.")
+						self.msgCallback("EPG Download beendet.")
+				elif re.search('No Valid Session found', data, re.S|re.I):
+					events = None
+					if self.callback:
+						self.msgCallback("Session Fehler.")
+				else:
+					try:
+						events = json.loads(data)['events']
+						colorprint("Antwort vom Server")
+						colorprint("Events: %d" % len(events))
+					except Exception, ex:
+						events = None
+						colorprint("Fehler beim EPG Download !!!")
+						if self.callback:
+							self.msgCallback("Fehler beim EPG Download %s" % str(ex))
+				if events is not None:
+					reflist = getRefList()
+					if len(reflist) > 0:
+						last_channel_name = ''
+						last_channel_ref = ''
+						channels = []
+						events_list = []
+						count_refs = len(events)
+						for event in events:
+							if not self.isRunning:
+								break
+							if str(event['channel_ref']) in reflist:
+								if str(event['channel_ref']) not in channels:
+									channels.append(str(event['channel_ref']))
+								if last_channel_ref in [str(event['channel_ref']), '']:
+									if event['extradata'] is None:
+										events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
+									else:
+										title = str(event['title'])
+										if config.plugins.epgShare.titleSeasonEpisode.value:
+											extradata = json.loads(event['extradata'])
+											if 'categoryName' in str(extradata):
+												if 'Serie' in str(extradata):
+													if 'season' and 'episode' in str(extradata):
+														season = str(extradata['season'])
+														episode = str(extradata['episode'])
+														if season and episode != '':
+															if int(season) < 10:
+																season = "S0"+str(season)
+															else:
+																season = "S"+str(season)
+															if int(episode) < 10:
+																episode = "E0"+str(episode)
+															else:
+																episode = "E"+str(episode)
+															title = "%s - %s%s" % (title, season, episode)
+
+										events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s \n<x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
+								else:
+									colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+									if self.callback:
+										self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+									self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
+									events_list = []
+									if event['extradata'] is None:
+										events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
+									else:
+										title = str(event['title'])
+										if config.plugins.epgShare.titleSeasonEpisode.value:
+											extradata = json.loads(event['extradata'])
+											if 'categoryName' in str(extradata):
+												if 'Serie' in str(extradata):
+													if 'season' and 'episode' in str(extradata):
+														season = str(extradata['season'])
+														episode = str(extradata['episode'])
+														if season and episode != '':
+															if int(season) < 10:
+																season = "S0"+str(season)
+															else:
+																season = "S"+str(season)
+															if int(episode) < 10:
+																episode = "E0"+str(episode)
+															else:
+																episode = "E"+str(episode)
+															title = "%s - %s%s" % (title, season, episode)
+
+										events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s <x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
+								last_channel_ref = str(event['channel_ref'])
+								last_channel_name = str(event['channel_name'])
+								count_refs += 1
+
+						if int(count_refs) == int(count_refs):
+							self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
+							colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+							colorprint("EPG Download beendet.")
+							self.epgcache.save()
+							if self.callback:
+								self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
+								self.msgCallback("EPG Download beendet.")
+							else:
+								if self.autoupdate:
+									Notifications.AddPopup(_("Epg Share Autoupdate abgeschlossen..."),
+	                                   MessageBox.TYPE_INFO,
+	                                   5)
+								else:
+									Notifications.AddPopup(_("Epg Share Update abgeschlossen..."),
+	                                   MessageBox.TYPE_INFO,
+	                                   5)
+
+					else:
+						colorprint("Keine reflist vorhanden.")
+				self.isRunning = False
+			else:
+				if self.callback:
+					self.msgCallback("Maximale Downloads pro Tag erreicht. Reset erfolgt um 0 Uhr")
 		else:
 			if self.callback:
-				self.msgCallback("Maximale Downloads pro Tag erreicht. Reset erfolgt um 0 Uhr")
+				self.msgCallback(str(p))
+		global epgDownloadThread
+		epgDownloadThread = None
 
-
+def sessionglobalsinit(self, session):
+		Screen.__init__(self, session)
+		self["CurrentService"] = CurrentService(session.nav)
+		self["Event_Now"] = EventInfo(session.nav, EventInfo.NOW)
+		self["Event_Next"] = EventInfo(session.nav, EventInfo.NEXT)
+		self["FrontendStatus"] = FrontendStatus(service_source = session.nav.getCurrentService)
+		self["FrontendInfo"] = FrontendInfo(navcore = session.nav)
+		self["VideoPicture"] = Source()
+		self["TunerInfo"] = TunerInfo()
+		self["RecordState"] = RecordState(session)
+		self["Standby"] = Boolean(fixed = False)
+		self["extEvent_Now"] = extEventInfo(session.nav, extEventInfo.NOW)
+		self["extEvent_Next"] = extEventInfo(session.nav, extEventInfo.NEXT)
+		from Components.SystemInfo import SystemInfo
+		combine = Combine(func = lambda s: {(False, False): 0, (False, True): 1, (True, False): 2, (True, True): 3}[(s[0].boolean, s[1].boolean)])
+		combine.connect(self["Standby"])
+		combine.connect(self["RecordState"])
+		#                      |  two leds  | single led |
+		# recordstate  standby   red green
+		#    false      false    off   on     off
+		#    true       false    blnk  on     blnk
+		#    false      true      on   off    off
+		#    true       true     blnk  off    blnk
+		PATTERN_ON     = (20, 0xffffffff, 0xffffffff)
+		PATTERN_OFF    = (20, 0, 0)
+		PATTERN_BLINK  = (20, 0x55555555, 0xa7fccf7a)
+		nr_leds = SystemInfo.get("NumFrontpanelLEDs", 0)
+		if nr_leds == 1:
+			FrontpanelLed(which = 0, boolean = False, patterns = [PATTERN_OFF, PATTERN_BLINK, PATTERN_OFF, PATTERN_BLINK]).connect(combine)
+		elif nr_leds == 2:
+			FrontpanelLed(which = 0, boolean = False, patterns = [PATTERN_OFF, PATTERN_BLINK, PATTERN_ON, PATTERN_BLINK]).connect(combine)
+			FrontpanelLed(which = 1, boolean = False, patterns = [PATTERN_ON, PATTERN_ON, PATTERN_OFF, PATTERN_OFF]).connect(combine)
 
 class epgShareUploader(threading.Thread):
 
@@ -553,14 +626,7 @@ class epgShareScreen(Screen):
 		self.chooseMenuList.l.setFont(0, gFont(font, int(size)))
 		self.chooseMenuList.l.setItemHeight(self.itemheight)
 		self.chooseMenuList.selectionEnabled(False)
-		global epgDownloadThread
-		if not epgDownloadThread is None:
-			self.isEpgDownload = True
-			epgDownloadThread.start().setCallback(self.callbacks)
-			if epgDownloadThread.isRunning:
-				self['key_yellow'].hide()
-		else:
-			self.isEpgDownload = False
+
 		self['info'] = Label(_("Info"))
 		self['list'] = self.chooseMenuList
 		self['key_red'] = Label(_("Exit"))
@@ -568,6 +634,19 @@ class epgShareScreen(Screen):
 		self['key_yellow'] = Label(_("EPG Download"))
 		self['key_blue'] = Label(_("Einstellungen"))
 		self.list = []
+		self.onLayoutFinish.append(self.startrun)
+
+
+	def startrun(self):
+		self.onLayoutFinish.remove(self.startrun)
+		global epgDownloadThread
+		if not epgDownloadThread is None:
+			self.isEpgDownload = True
+			epgDownloadThread.setCallback(self.callbacks)
+			if epgDownloadThread.isRunning:
+				self['key_yellow'].hide()
+		else:
+			self.isEpgDownload = False
 
 	def callbacks(self, text):
 		if text == "EPG Download beendet.":
@@ -592,13 +671,19 @@ class epgShareScreen(Screen):
 
 	def keyRun(self):
 		canrun = False
+
 		global epgDownloadThread
 		if epgDownloadThread is None:
 			epgDownloadThread = epgShareDownload(self.session, True)
 			canrun = True
 		else:
 			if not epgDownloadThread.isRunning:
+				epgDownloadThread = None
+				epgDownloadThread = epgShareDownload(self.session, True)
 				canrun = True
+			else:
+				epgDownloadThread.setCallback(self.callbacks)
+				self['key_yellow'].hide()
 		if canrun:
 			self.list = []
 			self.isEpgDownload = True
@@ -610,7 +695,8 @@ class epgShareScreen(Screen):
 		if self.isEpgDownload:
 			global epgDownloadThread
 			self.isEpgDownload = False
-			epgDownloadThread.stop()
+			if not epgDownloadThread is None:
+				epgDownloadThread.setCallback(None)
 		self.close()
 
 
@@ -639,7 +725,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 			"left"	:	self.keyLeft,
 			"right"	:	self.keyRight
 		}, -1)
-
+		self.useimprovervalue = config.plugins.epgShare.useimprover.value
 		self['info'] = Label(_("EPG Share Einstellung"))
 		self['key_red'] = Label(_("Cancel"))
 		self['key_green'] = Label(_("Save"))
@@ -679,6 +765,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 
 	def keySave(self):
 		global bg_timer
+		global eventinfo_orig
 		config.plugins.epgShare.auto.save()
 		config.plugins.epgShare.autorefreshtime.save()
 		config.plugins.epgShare.onstartup.save()
@@ -709,8 +796,11 @@ def epgshare_init_shutdown():
 	global updateservice
 	updateservice.epgUp.stopme()
 	updateservice.epgUp = None
-
 	updateservice.close()
+	global epgDownloadThread
+	if not epgDownloadThread is None:
+		epgDownloadThread.stop()
+		epgDownloadThread = None
 	if config.plugins.epgShare.auto.value:
 		now = time.localtime()
 		current_time = int(time.time())
@@ -735,6 +825,10 @@ def epgshare_init_shutdown():
 def autostart(reason, **kwargs):
 	if "session" in kwargs:
 		session = kwargs["session"]
+		global eventinfo_orig
+		eventinfo_orig = SessionGlobals.__init__
+		SessionGlobals.__init__ = sessionglobalsinit
+		session.screen = SessionGlobals(session)
 		# Starte Upload Service
 		global updateservice
 		updateservice = epgShare(session)
