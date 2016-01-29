@@ -3,7 +3,7 @@ from Screens.Screen import Screen
 from Screens.Setup import SetupSummary
 from Screens.MessageBox import MessageBox
 from Components.ConfigList import ConfigList, ConfigListScreen
-from Components.config import config, getConfigListEntry, ConfigSelection, ConfigClock, ConfigSubsection, ConfigYesNo, ConfigSubDict, ConfigNothing, ConfigInteger, configfile
+from Components.config import config, getConfigListEntry, ConfigSelection, ConfigText, ConfigClock, ConfigSubsection, ConfigYesNo, ConfigSubDict, ConfigNothing, ConfigInteger, configfile
 from Components.ServiceEventTracker import ServiceEventTracker
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -42,14 +42,17 @@ def getkeychallenge():
 
 def getpayload(session):
 	key = str(getkeychallenge())
-	url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s" % key
+	if str(config.plugins.epgShare.supporterKey.value) != "":
+		url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s&supporter=%s" % (key, str(config.plugins.epgShare.supporterKey.value))
+	else:
+		url = "http://timeforplanb.linevast-hosting.in/dologin.php?key=%s" % key
 	payload = session.get(url, timeout=10).text
 	if payload != '':
 		return json.loads(payload)
 	else:
 		return None
 
-
+epgDownloadThread = None
 updatethread = None
 
 config.plugins.epgShare = ConfigSubsection()
@@ -64,6 +67,7 @@ config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
 config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
 config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
 config.plugins.epgShare.sendTransponder = ConfigYesNo(default=True)
+config.plugins.epgShare.supporterKey = ConfigText(default="")
 
 def getSingleEventList(ref):
 	epgcache = eEPGCache.getInstance()
@@ -190,8 +194,13 @@ class autoGetEpg():
 		return self.timerRunning
 
 	def getepg(self):
-		epgDown = epgShareDownload(self.session)
-		epgDown.start()
+		global epgDownloadThread
+		if epgDownloadThread is None:
+			epgDownloadThread = epgShareDownload(self.session)
+			epgDownloadThread.start()
+		else:
+			if not epgDownloadThread.isRunning:
+				epgDownloadThread.start()
 
 
 class delayEpgDownload():
@@ -544,6 +553,14 @@ class epgShareScreen(Screen):
 		self.chooseMenuList.l.setFont(0, gFont(font, int(size)))
 		self.chooseMenuList.l.setItemHeight(self.itemheight)
 		self.chooseMenuList.selectionEnabled(False)
+		global epgDownloadThread
+		if not epgDownloadThread is None:
+			self.isEpgDownload = True
+			epgDownloadThread.start().setCallback(self.callbacks)
+			if epgDownloadThread.isRunning:
+				self['key_yellow'].hide()
+		else:
+			self.isEpgDownload = False
 		self['info'] = Label(_("Info"))
 		self['list'] = self.chooseMenuList
 		self['key_red'] = Label(_("Exit"))
@@ -551,10 +568,10 @@ class epgShareScreen(Screen):
 		self['key_yellow'] = Label(_("EPG Download"))
 		self['key_blue'] = Label(_("Einstellungen"))
 		self.list = []
-		self.isEpgDownload = False
 
 	def callbacks(self, text):
 		if text == "EPG Download beendet.":
+			self['key_yellow'].show()
 			self.isEpgDownload = False
 		self.showInfo(text)
 
@@ -574,17 +591,28 @@ class epgShareScreen(Screen):
 		self.session.open(epgShareSetup)
 
 	def keyRun(self):
-		self.list = []
-		self.isEpgDownload = True
-		self.epgDown = epgShareDownload(self.session, True)
-		self.epgDown.setCallback(self.callbacks)
-		self.epgDown.start()
+		canrun = False
+		global epgDownloadThread
+		if epgDownloadThread is None:
+			epgDownloadThread = epgShareDownload(self.session, True)
+			canrun = True
+		else:
+			if not epgDownloadThread.isRunning:
+				canrun = True
+		if canrun:
+			self.list = []
+			self.isEpgDownload = True
+			epgDownloadThread.setCallback(self.callbacks)
+			epgDownloadThread.start()
+			self['key_yellow'].hide()
 
 	def keyCancel(self):
 		if self.isEpgDownload:
+			global epgDownloadThread
 			self.isEpgDownload = False
-			self.epgDown.stop()
+			epgDownloadThread.stop()
 		self.close()
+
 
 class epgShareSetup(Screen, ConfigListScreen):
 	skin = """
@@ -634,6 +662,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.list.append(getConfigListEntry(_("EPG mit Extradaten verbessern"), config.plugins.epgShare.useimprover))
 		if config.plugins.epgShare.useimprover.value:
 			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
+		self.list.append(getConfigListEntry(_("Supporter Key"), config.plugins.epgShare.supporterKey))
 		self.list.append(getConfigListEntry(_("Debug Ausgabe aktivieren"), config.plugins.epgShare.debug))
 
 	def changedEntry(self):
@@ -657,6 +686,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.titleSeasonEpisode.save()
 		config.plugins.epgShare.useimprover.save()
 		config.plugins.epgShare.sendTransponder.save()
+		config.plugins.epgShare.supporterKey.save()
 		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
 		configfile.save()
