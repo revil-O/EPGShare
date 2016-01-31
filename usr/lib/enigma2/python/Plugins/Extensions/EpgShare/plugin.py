@@ -265,8 +265,6 @@ class epgShareDownload(threading.Thread):
 
 	def stop(self):
 		self.isRunning = False
-		global epgDownloadThread
-		epgDownloadThread = None
 
 	def run(self):
 		s = requests.Session()
@@ -282,9 +280,11 @@ class epgShareDownload(threading.Thread):
 				refs = {}
 				if config.plugins.epgShare.useimprover.value:
 					refs['refs'] = getRefListJson(getextradata=True)
+					print refs
 					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php?sessionkey=" + sessionkey, data=json.dumps(refs), timeout=180).text
 				else:
 					refs['refs'] = getRefListJson(getextradata=False)
+					print refs
 					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg.php?sessionkey=" + sessionkey , data=json.dumps(refs), timeout=180).text
 				if re.search('EPG ist aktuell', data, re.S|re.I):
 					events = None
@@ -405,39 +405,6 @@ class epgShareDownload(threading.Thread):
 				self.msgCallback(str(p))
 		global epgDownloadThread
 		epgDownloadThread = None
-
-def sessionglobalsinit(self, session):
-		Screen.__init__(self, session)
-		self["CurrentService"] = CurrentService(session.nav)
-		self["Event_Now"] = EventInfo(session.nav, EventInfo.NOW)
-		self["Event_Next"] = EventInfo(session.nav, EventInfo.NEXT)
-		self["FrontendStatus"] = FrontendStatus(service_source = session.nav.getCurrentService)
-		self["FrontendInfo"] = FrontendInfo(navcore = session.nav)
-		self["VideoPicture"] = Source()
-		self["TunerInfo"] = TunerInfo()
-		self["RecordState"] = RecordState(session)
-		self["Standby"] = Boolean(fixed = False)
-		self["extEvent_Now"] = extEventInfo(session.nav, extEventInfo.NOW)
-		self["extEvent_Next"] = extEventInfo(session.nav, extEventInfo.NEXT)
-		from Components.SystemInfo import SystemInfo
-		combine = Combine(func = lambda s: {(False, False): 0, (False, True): 1, (True, False): 2, (True, True): 3}[(s[0].boolean, s[1].boolean)])
-		combine.connect(self["Standby"])
-		combine.connect(self["RecordState"])
-		#                      |  two leds  | single led |
-		# recordstate  standby   red green
-		#    false      false    off   on     off
-		#    true       false    blnk  on     blnk
-		#    false      true      on   off    off
-		#    true       true     blnk  off    blnk
-		PATTERN_ON     = (20, 0xffffffff, 0xffffffff)
-		PATTERN_OFF    = (20, 0, 0)
-		PATTERN_BLINK  = (20, 0x55555555, 0xa7fccf7a)
-		nr_leds = SystemInfo.get("NumFrontpanelLEDs", 0)
-		if nr_leds == 1:
-			FrontpanelLed(which = 0, boolean = False, patterns = [PATTERN_OFF, PATTERN_BLINK, PATTERN_OFF, PATTERN_BLINK]).connect(combine)
-		elif nr_leds == 2:
-			FrontpanelLed(which = 0, boolean = False, patterns = [PATTERN_OFF, PATTERN_BLINK, PATTERN_ON, PATTERN_BLINK]).connect(combine)
-			FrontpanelLed(which = 1, boolean = False, patterns = [PATTERN_ON, PATTERN_ON, PATTERN_OFF, PATTERN_OFF]).connect(combine)
 
 class epgShareUploader(threading.Thread):
 
@@ -825,20 +792,9 @@ def epgshare_init_shutdown():
 def autostart(reason, **kwargs):
 	if "session" in kwargs:
 		session = kwargs["session"]
-		global eventinfo_orig
-		eventinfo_orig = SessionGlobals.__init__
-		SessionGlobals.__init__ = sessionglobalsinit
-		session.screen = SessionGlobals(session)
 		# Starte Upload Service
 		global updateservice
 		updateservice = epgShare(session)
-		# Hole EPG Daten vom Server beim e2 neustart mit delay
-		#if config.plugins.epgShare.onstartup.value:
-	#		delayEpgDownload(session)
-	#		delay_timer = delayEpgDownload.instance
-	#		delay_timer.startTimer()
-
-		# Auto EPG Update Timer
 		autoGetEpg(session)
 		global bg_timer
 		bg_timer = autoGetEpg.instance
@@ -851,5 +807,5 @@ def main(session, **kwargs):
 def Plugins(path, **kwargs):
 	list = []
 	list.append(PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART, PluginDescriptor.WHERE_AUTOSTART], fnc=autostart, wakeupfnc=epgshare_init_shutdown))
-	list.append(PluginDescriptor(name = ("EPG Share"), description = ("EPG Service for your VU+"), where = PluginDescriptor.WHERE_PLUGINMENU, fnc = main))
+	list.append(PluginDescriptor(name = ("EPG Share"), description = ("EPG Service for your VU+"), where = PluginDescriptor.WHERE_PLUGINMENU, fnc=main))
 	return list
