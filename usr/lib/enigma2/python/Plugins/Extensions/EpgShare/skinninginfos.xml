@@ -1,0 +1,25 @@
+
+<screen name="epgShareScreen" title="EPG Share" position="center,center" size="1280,720">
+  <widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
+  <widget name="list" position="10,80" size="1260,570" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+	<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_blue" position="1073,680" size="200,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<ePixmap position="59,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_red.png" alphatest="on" />
+	<ePixmap position="374,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_green.png" alphatest="on" />
+	<ePixmap position="726,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_yellow.png" alphatest="on" />
+	<ePixmap position="1037,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_blue.png" alphatest="on" />
+  </screen>
+<screen name="epgShareSetup" title="EPG Share Setup" position="center,center" size="1280,720">
+	<widget name="info" position="10,10" size="600,50" zPosition="5" transparent="0" halign="left" valign="top" font="Regular; 30" />
+	<widget name="config" position="10,80" size="1260,570" font="Regular;22" textOffset="20,2" itemHeight="50" scrollbarMode="showOnDemand" scrollbarSliderBorderWidth="0" scrollbarWidth="5" scrollbarBackgroundPicture="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/scrollbarbg.png" />
+	<widget name="key_red" position="99,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_green" position="411,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_yellow" position="761,680" size="265,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<widget name="key_blue" position="1073,680" size="200,30" zPosition="1" font="Regular;22" halign="left" foregroundColor="#00ffffff" transparent="0" />
+	<ePixmap position="59,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_red.png" alphatest="on" />
+	<ePixmap position="374,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_green.png" alphatest="on" />
+	<ePixmap position="726,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_yellow.png" alphatest="on" />
+	<ePixmap position="1037,684" size="25,25" zPosition="-1" pixmap="/usr/lib/enigma2/python/Plugins/Extensions/EpgShare/pic/button_blue.png" alphatest="on" />
+ </screen>

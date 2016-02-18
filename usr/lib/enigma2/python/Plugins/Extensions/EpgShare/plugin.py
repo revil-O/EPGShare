@@ -32,17 +32,6 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from datetime import datetime, timedelta
 from Tools import Notifications
 from Screens.Screen import Screen
-from Components.Sources.CurrentService import CurrentService
-from Components.Sources.EventInfo import EventInfo
-from Components.Sources.FrontendStatus import FrontendStatus
-from Components.Sources.FrontendInfo import FrontendInfo
-from Components.Sources.Source import Source
-from Components.Sources.TunerInfo import TunerInfo
-from Components.Sources.Boolean import Boolean
-from Components.Sources.RecordState import RecordState
-from Components.Converter.Combine import Combine
-from Components.Renderer.FrontpanelLed import FrontpanelLed
-from Components.Sources.extEventInfo import extEventInfo
 from os.path import splitext, basename
 from urlparse import urlparse
 import skin
@@ -127,7 +116,7 @@ def getRefListJson(getextradata=False):
 						lasteventtime = starttime
 					except:
 						lasteventtime = 0
-				l.append({'ref': str(serviceref), 'time': lasteventtime})
+				l.append({'ref': str(serviceref), 'time': lasteventtime, 'name': servicename})
 	return l
 
 def builFullChannellist():
@@ -277,126 +266,74 @@ class epgShareDownload(threading.Thread):
 				colorprint("Hole EPG Daten vom Server")
 				self.msgCallback("Hole EPG Daten vom Server.. Bitte warten")
 				requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-				refs = {}
 				if config.plugins.epgShare.useimprover.value:
-					refs['refs'] = getRefListJson(getextradata=True)
-					print refs
-					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_ext.php?sessionkey=" + sessionkey, data=json.dumps(refs), timeout=180).text
+					refs = getRefListJson(getextradata=True)
 				else:
-					refs['refs'] = getRefListJson(getextradata=False)
-					print refs
-					data = s.post("http://timeforplanb.linevast-hosting.in/download_epg.php?sessionkey=" + sessionkey , data=json.dumps(refs), timeout=180).text
-				if re.search('EPG ist aktuell', data, re.S|re.I):
-					events = None
-					if self.callback:
-						self.msgCallback("EPG ist aktuell.")
-						self.msgCallback("EPG Download beendet.")
-				elif re.search('No Valid Session found', data, re.S|re.I):
-					events = None
-					if self.callback:
-						self.msgCallback("Session Fehler.")
-				else:
+					refs = getRefListJson(getextradata=False)
+				for ref in refs:
+					if config.plugins.epgShare.useimprover.value:
+						data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=true&finished=false", data=json.dumps(ref), timeout=180).text
+					else:
+						data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=false&finished=false", data=json.dumps(ref), timeout=180).text
 					try:
 						events = json.loads(data)['events']
-						colorprint("Antwort vom Server")
-						colorprint("Events: %d" % len(events))
 					except Exception, ex:
+						print data
 						events = None
 						colorprint("Fehler beim EPG Download !!!")
 						if self.callback:
 							self.msgCallback("Fehler beim EPG Download %s" % str(ex))
-				if events is not None:
-					reflist = getRefList()
-					if len(reflist) > 0:
-						last_channel_name = ''
-						last_channel_ref = ''
-						channels = []
+					if events is not None:
 						events_list = []
 						count_refs = len(events)
 						for event in events:
 							if not self.isRunning:
 								break
-							if str(event['channel_ref']) in reflist:
-								if str(event['channel_ref']) not in channels:
-									channels.append(str(event['channel_ref']))
-								if last_channel_ref in [str(event['channel_ref']), '']:
-									if event['extradata'] is None:
-										events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
-									else:
-										title = str(event['title'])
-										if config.plugins.epgShare.titleSeasonEpisode.value:
-											extradata = json.loads(event['extradata'])
-											if 'categoryName' in str(extradata):
-												if 'Serie' in str(extradata):
-													if 'season' and 'episode' in str(extradata):
-														season = str(extradata['season'])
-														episode = str(extradata['episode'])
-														if season and episode != '':
-															if int(season) < 10:
-																season = "S0"+str(season)
-															else:
-																season = "S"+str(season)
-															if int(episode) < 10:
-																episode = "E0"+str(episode)
-															else:
-																episode = "E"+str(episode)
-															title = "%s - %s%s" % (title, season, episode)
-
-										events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s \n<x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
-								else:
-									colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-									if self.callback:
-										self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-									self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
-									events_list = []
-									if event['extradata'] is None:
-										events_list.append((long(event['starttime']), int(event['duration']), str(event['title']), str(event['subtitle']), str(event['handlung']), 0, long(event['event_id'])),)
-									else:
-										title = str(event['title'])
-										if config.plugins.epgShare.titleSeasonEpisode.value:
-											extradata = json.loads(event['extradata'])
-											if 'categoryName' in str(extradata):
-												if 'Serie' in str(extradata):
-													if 'season' and 'episode' in str(extradata):
-														season = str(extradata['season'])
-														episode = str(extradata['episode'])
-														if season and episode != '':
-															if int(season) < 10:
-																season = "S0"+str(season)
-															else:
-																season = "S"+str(season)
-															if int(episode) < 10:
-																episode = "E0"+str(episode)
-															else:
-																episode = "E"+str(episode)
-															title = "%s - %s%s" % (title, season, episode)
-
-										events_list.append((long(event['starttime']), int(event['duration']), str(title), str(event['subtitle']), "%s <x>%s</x>" % (str(event['handlung']), str(event['extradata'])), 0, long(event['event_id'])),)
-								last_channel_ref = str(event['channel_ref'])
-								last_channel_name = str(event['channel_name'])
-								count_refs += 1
-
-						if int(count_refs) == int(count_refs):
-							self.epgcache.importLockedEventswithID(last_channel_ref, events_list)
-							colorprint("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-							colorprint("EPG Download beendet.")
-							self.epgcache.save()
-							if self.callback:
-								self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), last_channel_name))
-								self.msgCallback("EPG Download beendet.")
+							if event['extradata'] is None:
+								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']).encode('utf-8'), str(event['subtitle']).encode('utf-8'), str(event['handlung']).encode('utf-8'), 0, long(event['event_id'])),)
 							else:
-								if self.autoupdate:
-									Notifications.AddPopup(_("Epg Share Autoupdate abgeschlossen..."),
-	                                   MessageBox.TYPE_INFO,
-	                                   5)
-								else:
-									Notifications.AddPopup(_("Epg Share Update abgeschlossen..."),
-	                                   MessageBox.TYPE_INFO,
-	                                   5)
-
+								title = str(event['title'])
+								if config.plugins.epgShare.titleSeasonEpisode.value:
+									extradata = json.loads(event['extradata'])
+									if 'categoryName' in str(extradata):
+										if 'Serie' in str(extradata):
+											if 'season' and 'episode' in str(extradata):
+												season = str(extradata['season'])
+												episode = str(extradata['episode'])
+												if season and episode != '':
+													if int(season) < 10:
+														season = "S0"+str(season)
+													else:
+														season = "S"+str(season)
+													if int(episode) < 10:
+														episode = "E0"+str(episode)
+													else:
+														episode = "E"+str(episode)
+													title = "%s - %s%s" % (title, season, episode)			
+								events_list.append((long(event['starttime']), int(event['duration']), str(title).encode('utf-8'), str(event['subtitle']).encode('utf-8'), "%s \n<x>%s</x>" % (str(event['handlung']).encode('utf-8'), str(event['extradata']).encode('utf-8')), 0, long(event['event_id'])),)
+								count_refs += 1
+						self.epgcache.importLockedEventswithID(str(ref['ref']), events_list)
+						colorprint("Import %s Events for Channel: %s" % (len(events_list), str(ref['name'])))
+						if self.callback:
+							self.msgCallback("Import %s Events for Channel: %s" % (len(events_list), str(ref['name'])))
+				colorprint("EPG Download beendet.")
+				self.epgcache.save()
+				s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&finished=true&extradata=false", data=json.dumps(ref), timeout=180)
+				if self.callback:
+					self.msgCallback("EPG Download beendet.")
+				
+				else:
+					if self.autoupdate:
+													Notifications.AddPopup(_("Epg Share Autoupdate abgeschlossen..."),
+													   MessageBox.TYPE_INFO,
+													   5)
 					else:
-						colorprint("Keine reflist vorhanden.")
-				self.isRunning = False
+													Notifications.AddPopup(_("Epg Share Update abgeschlossen..."),
+													   MessageBox.TYPE_INFO,
+													   5)
+					
+		
+					self.isRunning = False
 			else:
 				if self.callback:
 					self.msgCallback("Maximale Downloads pro Tag erreicht. Reset erfolgt um 0 Uhr")
@@ -417,62 +354,74 @@ class epgShareUploader(threading.Thread):
 		threading.Thread.__init__(self)
 
 	def stopme(self):
+		self.channelqueue = None
+		self.queuelist = None
 		self.stopped = True
 
 	def run(self):
 		colorprint("Grab Channel EPG")
 		while not self.stopped:
-			if not self.channelqueue.empty():
-				while not self.channelqueue.empty():
-					if not self.stopped:
-						channel_ref = None
-						try:
-							info = self.channelqueue.get()
-							if info:
-								(channel_name, channel_ref) = info
-								colorprint("%s %s" % (channel_name, channel_ref))
-								test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
-								dvb_events = []
-								count_dvb_events = 0
-								dvb_events_real = []
-								count_dvb_events_real = 0
-								dvb_events = self.epgcache.lookupEvent(test)
-								count_dvb_events = len(dvb_events)
-								time.sleep(1)
-								colorprint("Checking Eventcount")
-								while len(self.epgcache.lookupEvent(test)) > count_dvb_events:
-									colorprint("Eventcount is increasing")
-									colorprint("Waiting 1 Second")
-									time.sleep(1)
+			try:
+				if not self.channelqueue.empty():
+					while not self.channelqueue.empty():
+						if not self.stopped:
+							channel_ref = None
+							try:
+								info = self.channelqueue.get()
+								if info:
+									(channel_name, channel_ref) = info
+									colorprint("%s %s" % (channel_name, channel_ref))
+									test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
+									dvb_events = []
+									count_dvb_events = 0
+									dvb_events_real = []
+									count_dvb_events_real = 0
 									dvb_events = self.epgcache.lookupEvent(test)
 									count_dvb_events = len(dvb_events)
-								colorprint("Eventcount is not increasing... not Channelupdate running")
-								dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE', 'PRIVATE_UPDATE'], dvb_events)
-								count_dvb_events_real = str(len(dvb_events_real))
-								colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
-								if len(dvb_events_real) > 0:
-									postdata = []
-									for event in dvb_events_real:
-										(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
-										ev = {}
-										ev['event_id'] = str(event_id)
-										ev['addtime'] = str(int(time.time()))
-										ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
-										ev['channel_ref'] = str(channel_ref)
-										ev['starttime'] = str(starttime)
-										ev['duration'] = str(duration)
-										ev['title'] = str(title)
-										ev['subtitle'] = str(subtitle)
-										ev['handlung'] = str(handlung)
-										postdata.append(ev)
-									requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-									post = {'events': json.dumps(postdata)}
-									colorprint(str(requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text))
-
-						except Exception, ex:
-							colorprint("Grab Channel EPG - Error: %s" % str(ex))
-						if channel_ref:
-							self.queuelist.remove(channel_ref)
+									time.sleep(1)
+									colorprint("Checking Eventcount")
+									while len(self.epgcache.lookupEvent(test)) > count_dvb_events:
+										if not self.stopped:
+											colorprint("Eventcount is increasing")
+											colorprint("Waiting 1 Second")
+											time.sleep(1)
+											dvb_events = self.epgcache.lookupEvent(test)
+											count_dvb_events = len(dvb_events)
+										else:
+											break
+									colorprint("Eventcount is not increasing... no Channelupdate running")
+									dvb_events_real = filter(lambda x: str(x[6]) in ['NOWNEXT', 'SCHEDULE','PRIVATE_UPDATE'], dvb_events)
+									count_dvb_events_real = str(len(dvb_events_real))
+									colorprint("Count %s from %s Events" % (str(count_dvb_events_real), str(count_dvb_events)))
+									if len(dvb_events_real) > 0:
+										postdata = []
+										for event in dvb_events_real:
+											if not self.stopped:
+												(event_id, starttime, duration, title, subtitle, handlung, import_type) = event
+												ev = {}
+												ev['event_id'] = str(event_id)
+												ev['addtime'] = str(int(time.time()))
+												ev['channel_name'] = str(channel_name.replace('\xc2\x86', '').replace('\xc2\x87', ''))
+												ev['channel_ref'] = str(channel_ref)
+												ev['starttime'] = str(starttime)
+												ev['duration'] = str(duration)
+												ev['title'] = str(title).encode('utf-8')
+												ev['subtitle'] = str(subtitle).strip().encode('utf-8')
+												ev['handlung'] = str(handlung).strip().encode('utf-8')
+												postdata.append(ev)
+										if not self.stopped:
+											requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+											post = {'events': json.dumps(postdata)}
+											colorprint(str(requests.post('http://timeforplanb.linevast-hosting.in/import_epg.php', data=post, timeout=10).text))
+							except Exception, ex:
+								colorprint("Grab Channel EPG - Error: %s" % str(ex))
+							if channel_ref:
+								if self.queuelist:
+									self.queuelist.remove(channel_ref)
+								else:
+									self.stopped = True
+			except:
+				pass
 			time.sleep(1)
 
 
@@ -522,8 +471,9 @@ class epgShare(Screen):
 				pass
 
 	def __onClose(self):
-		self.epgUp.stopme()
-		self.epgUp = None
+		#self.epgUp.stopme()
+		#self.epgUp = None
+		return
 
 	def delaytimer(self):
 		self.Timer.stop()
@@ -705,17 +655,13 @@ class epgShareSetup(Screen, ConfigListScreen):
 
 	def createConfigList(self):
 		self.list = []
-		#self.list.append(getConfigListEntry(_("Transponder EPG hochladen"), config.plugins.epgShare.sendTransponder))
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Uhrzeit"), config.plugins.epgShare.autorefreshtime))
-		#self.list.append(getConfigListEntry(_("Beim Enigma2 start EPG automatisch vom Server holen"), config.plugins.epgShare.onstartup))
-		#if config.plugins.epgShare.onstartup.value:
-		#	self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen nach x Minuten"), config.plugins.epgShare.onstartupdelay))
 		self.list.append(getConfigListEntry(_("EPG mit Extradaten verbessern"), config.plugins.epgShare.useimprover))
 		if config.plugins.epgShare.useimprover.value:
 			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
-		self.list.append(getConfigListEntry(_("Supporter Key"), config.plugins.epgShare.supporterKey))
+		#self.list.append(getConfigListEntry(_("Supporter Key"), config.plugins.epgShare.supporterKey))
 		self.list.append(getConfigListEntry(_("Debug Ausgabe aktivieren"), config.plugins.epgShare.debug))
 
 	def changedEntry(self):
