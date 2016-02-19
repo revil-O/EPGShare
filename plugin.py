@@ -271,14 +271,14 @@ class epgShareDownload(threading.Thread):
 				else:
 					refs = getRefListJson(getextradata=False)
 				for ref in refs:
-					if config.plugins.epgShare.useimprover.value:
-						data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=true&finished=false", data=json.dumps(ref), timeout=180).text
-					else:
-						data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=false&finished=false", data=json.dumps(ref), timeout=180).text
+					colorprint("Loading ChannelEPG: %s / %s" % (str(ref['ref']), str(ref['name'])))
 					try:
-						events = json.loads(data)['events']
+						if config.plugins.epgShare.useimprover.value:
+							data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=true&finished=false", data=json.dumps(ref), timeout=180).json()
+						else:
+							data = s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&extradata=false&finished=false", data=json.dumps(ref), timeout=180).json()
+						events = data['events']
 					except Exception, ex:
-						print data
 						events = None
 						colorprint("Fehler beim EPG Download !!!")
 						if self.callback:
@@ -289,7 +289,12 @@ class epgShareDownload(threading.Thread):
 						for event in events:
 							if not self.isRunning:
 								break
-							if event['extradata'] is None:
+							gotextradata = False
+							if 'extradata' in events:
+								if not event['extradata'] is None:
+									gotextradata = True
+
+							if not gotextradata:
 								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']).encode('utf-8'), str(event['subtitle']).encode('utf-8'), str(event['handlung']).encode('utf-8'), 0, long(event['event_id'])),)
 							else:
 								title = str(event['title'])
@@ -707,9 +712,10 @@ class epgShareSetup(Screen, ConfigListScreen):
 def epgshare_init_shutdown():
 	colorprint("Initializing Shutdown")
 	global updateservice
-	updateservice.epgUp.stopme()
-	updateservice.epgUp = None
-	updateservice.close()
+	if not updateservice is None:
+		updateservice.epgUp.stopme()
+		updateservice.epgUp = None
+		updateservice.close()
 	global epgDownloadThread
 	if not epgDownloadThread is None:
 		epgDownloadThread.stop()
