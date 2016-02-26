@@ -38,6 +38,11 @@ import skin
 import uuid
 from pyDes import *
 
+import NavigationInstance
+from RecordTimer import RecordTimerEntry, RecordTimer, parseEvent, AFTEREVENT
+from Components.TimerSanityCheck import TimerSanityCheck
+import Screens.Standby
+
 def getkeychallenge():
     k = triple_des((str(uuid.getnode()) * 2)[0:24], CBC, "\0\0\0\0\0\0\0\0", padmode=PAD_PKCS5)
     d = k.encrypt(open(base64.b64decode("L3N5cy9jbGFzcy9uZXQvZXRoMC9hZGRyZXNz"), "r").readline().strip())
@@ -73,6 +78,7 @@ config.plugins.epgShare.titleDate = ConfigYesNo(default=False)
 config.plugins.epgShare.sendTransponder = ConfigYesNo(default=True)
 config.plugins.epgShare.supporterKey = ConfigText(default="", fixed_size=False)
 config.plugins.epgShare.lastupdate = ConfigText(default="", fixed_size=False)
+config.plugins.epgShare.afterAuto = ConfigSelection(default = "0", choices = [("0", "keine"), ("1", "in Standby gehen"), ("2", "in Deep-Standby gehen")])
 
 def getSingleEventList(ref):
 	epgcache = eEPGCache.getInstance()
@@ -201,7 +207,7 @@ class autoGetEpg():
 	def getepg(self):
 		global epgDownloadThread
 		if epgDownloadThread is None:
-			epgDownloadThread = epgShareDownload(self.session)
+			epgDownloadThread = epgShareDownload(self.session, False, True)
 			epgDownloadThread.start()
 			Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
                                    MessageBox.TYPE_INFO,
@@ -209,7 +215,7 @@ class autoGetEpg():
 		else:
 			if not epgDownloadThread.isRunning:
 				epgDownloadThread = None
-				epgDownloadThread = epgShareDownload(self.session)
+				epgDownloadThread = epgShareDownload(self.session, False, True)
 				epgDownloadThread.start()
 				Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
                                    MessageBox.TYPE_INFO,
@@ -290,7 +296,8 @@ class epgShareDownload(threading.Thread):
 							if not self.isRunning:
 								break
 							gotextradata = False
-							if 'extradata' in events:
+							#print event
+							if 'extradata' in event:
 								if not event['extradata'] is None:
 									gotextradata = True
 
@@ -298,6 +305,7 @@ class epgShareDownload(threading.Thread):
 								events_list.append((long(event['starttime']), int(event['duration']), str(event['title']).encode('utf-8'), str(event['subtitle']).encode('utf-8'), str(event['handlung']).encode('utf-8'), 0, long(event['event_id'])),)
 							else:
 								title = str(event['title'])
+								#print "GotExtradata: %s" % str(event['extradata'])
 								if config.plugins.epgShare.titleSeasonEpisode.value:
 									extradata = json.loads(event['extradata'])
 									if 'categoryName' in str(extradata):
@@ -347,6 +355,22 @@ class epgShareDownload(threading.Thread):
 				self.msgCallback(str(p))
 		global epgDownloadThread
 		epgDownloadThread = None
+		if self.autoupdate:
+			self.afterAuto()
+
+	def afterAuto(self):
+		if config.plugins.epgShare.afterAuto.value == "2":
+			if not NavigationInstance.instance.RecordTimer.isRecording():
+				self.msgCallback("gehe in Deep-Standby")
+				if Screens.Standby.inStandby:
+					RecordTimerEntry.TryQuitMainloop()
+				else:
+					Notifications.AddNotificationWithID("Shutdown", Screens.Standby.TryQuitMainloop, 1)
+			else:
+				self.msgCallback("Eine laufenden Aufnahme verhindert den Deep-Standby")
+		else:
+			self.msgCallback("gehe in Standby")
+			Notifications.AddNotification(Screens.Standby.Standby)
 
 class epgShareUploader(threading.Thread):
 
@@ -376,11 +400,12 @@ class epgShareUploader(threading.Thread):
 								if info:
 									(channel_name, channel_ref) = info
 									colorprint("%s %s" % (channel_name, channel_ref))
-									test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
+
 									dvb_events = []
 									count_dvb_events = 0
 									dvb_events_real = []
 									count_dvb_events_real = 0
+									test = [ 'IBDTSEv', (channel_ref, 0, time.time(), -1)]
 									dvb_events = self.epgcache.lookupEvent(test)
 									count_dvb_events = len(dvb_events)
 									time.sleep(1)
@@ -663,6 +688,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		self.list.append(getConfigListEntry(_("EPG automatisch vom Server holen"), config.plugins.epgShare.auto))
 		if config.plugins.epgShare.auto.value:
 			self.list.append(getConfigListEntry(_("Uhrzeit"), config.plugins.epgShare.autorefreshtime))
+			self.list.append(getConfigListEntry(_("Aktion nach dem automatischen EPG Download:"), config.plugins.epgShare.afterAuto))
 		self.list.append(getConfigListEntry(_("EPG mit Extradaten verbessern"), config.plugins.epgShare.useimprover))
 		if config.plugins.epgShare.useimprover.value:
 			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
@@ -694,6 +720,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.supporterKey.save()
 		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
+		config.plugins.epgShare.afterAuto.save()
 		configfile.save()
 		if config.plugins.epgShare.auto.value:
 			if not bg_timer.isRunning():
