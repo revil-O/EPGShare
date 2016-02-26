@@ -71,6 +71,7 @@ config.plugins.epgShare.onstartup = ConfigYesNo(default=False)
 config.plugins.epgShare.useimprover = ConfigYesNo(default=False)
 config.plugins.epgShare.onstartupdelay = ConfigInteger(2, (1, 60))
 config.plugins.epgShare.debug = ConfigYesNo(default=False)
+config.plugins.epgShare.writelog = ConfigYesNo(default=False)
 config.plugins.epgShare.autorefreshtime = ConfigClock(default=6 * 3600)
 config.plugins.epgShare.starttimedelay = ConfigInteger(default=10)
 config.plugins.epgShare.titleSeasonEpisode = ConfigYesNo(default=False)
@@ -110,6 +111,8 @@ def getRefListJson(getextradata=False):
 	tvbouquets = getTVBouquets()
 	for bouquet in tvbouquets:
 		bouquetlist = getServiceList(bouquet[0])
+		colorprint("Bouquets: %s" % len(tvbouquets))
+		colorprint("Bouquets %s" % tvbouquets)
 		for (serviceref, servicename) in bouquetlist:
 			if not serviceref in refs:
 				refs.append(serviceref)
@@ -122,6 +125,7 @@ def getRefListJson(getextradata=False):
 						lasteventtime = starttime
 					except:
 						lasteventtime = 0
+				colorprint("%s - %s - %s" % (servicename, str(serviceref), str(lasteventtime)))
 				l.append({'ref': str(serviceref), 'time': lasteventtime, 'name': servicename})
 	return l
 
@@ -149,10 +153,21 @@ def getRefFromChannelName(channelname):
 				return serviceref
 
 def colorprint(stringvalue):
+	if config.plugins.epgShare.writelog.value:
+		writeLog(stringvalue)
 	if config.plugins.epgShare.debug.value:
 		color_print = "\033[92m"
 		color_end = "\33[0m"
 		print color_print + "[EPG Share] " + str(stringvalue) + color_end
+
+def writeLog(text):
+	logFile = "/tmp/epgshare.log"
+	if not fileExists(logFile):
+		open(logFile, 'w').close()
+
+	writeLogFile = open(logFile, "a")
+	writeLogFile.write('%s\n' % (text))
+	writeLogFile.close()
 
 def getlasteventtime(serviceref):
 	try:
@@ -189,7 +204,7 @@ class autoGetEpg():
 			self.Timer.start(start_time * 60 * 1000,True)
 			self.timerRunning = True
 			now = str(datetime.now().strftime('%d.%m.%Y %H:%M:%S'))
-			colorprint("Auto EPG Update startet in %s std. um %s Uhr." % (str(config.plugins.epgShare.hours.value), str(now)))
+			colorprint("Auto EPG Update startet in %s min. um %s:%s Uhr." % (str(start_time), str(config.plugins.epgShare.autorefreshtime.value[0]), str(config.plugins.epgShare.autorefreshtime.value[1])))
 			return
 		else:
 			colorprint("Auto EPG Update ist nicht in den Einstellungen aktiviert.")
@@ -209,17 +224,13 @@ class autoGetEpg():
 		if epgDownloadThread is None:
 			epgDownloadThread = epgShareDownload(self.session, False, True)
 			epgDownloadThread.start()
-			Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
-                                   MessageBox.TYPE_INFO,
-                                   5)
+			Notifications.AddPopup("Epg Share Autoupdate wurde gestartet...", MessageBox.TYPE_INFO, timeout=5)
 		else:
 			if not epgDownloadThread.isRunning:
 				epgDownloadThread = None
 				epgDownloadThread = epgShareDownload(self.session, False, True)
 				epgDownloadThread.start()
-				Notifications.AddPopup(_("Epg Share Autoupdate wurde gestartet..."),
-                                   MessageBox.TYPE_INFO,
-                                   5)
+				Notifications.AddPopup("Epg Share Autoupdate wurde gestartet...", MessageBox.TYPE_INFO, timeout=5)
 
 class delayEpgDownload():
 
@@ -249,6 +260,8 @@ class epgShareDownload(threading.Thread):
 		self.autoupdate = autoupdate
 		self.isRunning = False
 		self.epgcache = eEPGCache.getInstance()
+		self.starttime_unix = 0
+		self.endtime_unix = 0
 		threading.Thread.__init__(self)
 
 	def setCallback(self, callback_infos):
@@ -262,6 +275,9 @@ class epgShareDownload(threading.Thread):
 		self.isRunning = False
 
 	def run(self):
+		self.starttime_unix = time.time()
+		colorprint("---------------------------------------------------------- START -------------------------------------------------------------------------")
+		colorprint("Starte EPG-Download %s" % time.strftime("%d.%m.%Y - %H:%M", time.gmtime()))
 		s = requests.Session()
 		p = getpayload(s)
 		if isinstance(p, dict):
@@ -275,7 +291,7 @@ class epgShareDownload(threading.Thread):
 				if config.plugins.epgShare.useimprover.value:
 					refs = getRefListJson(getextradata=True)
 				else:
-					refs = getRefListJson(getextradata=False)
+					refs = getRefListJson(getextradata=True) # lasttime erstmal deaktiviert
 				for ref in refs:
 					colorprint("Loading ChannelEPG: %s / %s" % (str(ref['ref']), str(ref['name'])))
 					try:
@@ -334,18 +350,11 @@ class epgShareDownload(threading.Thread):
 				s.post("http://timeforplanb.linevast-hosting.in/download_epg_2.php?sessionkey=" + sessionkey + "&finished=true&extradata=false", data=json.dumps(ref), timeout=180)
 				if self.callback:
 					self.msgCallback("EPG Download beendet.")
-				
 				else:
 					if self.autoupdate:
-													Notifications.AddPopup(_("Epg Share Autoupdate abgeschlossen..."),
-													   MessageBox.TYPE_INFO,
-													   5)
+						Notifications.AddPopup("Epg Share Autoupdate abgeschlossen...", MessageBox.TYPE_INFO, timeout=5)
 					else:
-													Notifications.AddPopup(_("Epg Share Update abgeschlossen..."),
-													   MessageBox.TYPE_INFO,
-													   5)
-					
-		
+						Notifications.AddPopup("Epg Share Update abgeschlossen...", MessageBox.TYPE_INFO, timeout=5)
 					self.isRunning = False
 			else:
 				if self.callback:
@@ -357,20 +366,29 @@ class epgShareDownload(threading.Thread):
 		epgDownloadThread = None
 		if self.autoupdate:
 			self.afterAuto()
+		self.endtime_unix = time.time()
+		duration_time_unix = int((self.endtime_unix - self.starttime_unix))
+		if self.callback:
+			self.msgCallback("Der EPG Download dauerte %s sekunden" % str(duration_time_unix))
+		colorprint("Der EPG Download dauerte %s sekunden" % str(duration_time_unix))
+		colorprint("---------------------------------------------------------- ENDE -------------------------------------------------------------------------")
 
 	def afterAuto(self):
-		if config.plugins.epgShare.afterAuto.value == "2":
+		if config.plugins.epgShare.afterAuto.value == 1:
+			#self.msgCallback("gehe in Standby")
+			colorprint("gehe in Standby")
+			Notifications.AddNotification(Screens.Standby.Standby)
+		elif config.plugins.epgShare.afterAuto.value == "2":
 			if not NavigationInstance.instance.RecordTimer.isRecording():
-				self.msgCallback("gehe in Deep-Standby")
+				#self.msgCallback("gehe in Deep-Standby")
+				colorprint("gehe in Deep-Standby")
 				if Screens.Standby.inStandby:
 					RecordTimerEntry.TryQuitMainloop()
 				else:
 					Notifications.AddNotificationWithID("Shutdown", Screens.Standby.TryQuitMainloop, 1)
 			else:
-				self.msgCallback("Eine laufenden Aufnahme verhindert den Deep-Standby")
-		else:
-			self.msgCallback("gehe in Standby")
-			Notifications.AddNotification(Screens.Standby.Standby)
+				#self.msgCallback("Eine laufenden Aufnahme verhindert den Deep-Standby")
+				colorprint("Eine laufenden Aufnahme verhindert den Deep-Standby")
 
 class epgShareUploader(threading.Thread):
 
@@ -453,7 +471,6 @@ class epgShareUploader(threading.Thread):
 			except:
 				pass
 			time.sleep(1)
-
 
 	def addChannel(self, channel):
 		if not channel[1] in self.queuelist:
@@ -583,7 +600,6 @@ class epgShareScreen(Screen):
 		self.list = []
 		self.onLayoutFinish.append(self.startrun)
 
-
 	def startrun(self):
 		self.onLayoutFinish.remove(self.startrun)
 		global epgDownloadThread
@@ -693,7 +709,8 @@ class epgShareSetup(Screen, ConfigListScreen):
 		if config.plugins.epgShare.useimprover.value:
 			self.list.append(getConfigListEntry(_("Season und Episode (S01E01) zum Sendungs-Titel hinzufügen"), config.plugins.epgShare.titleSeasonEpisode))
 		#self.list.append(getConfigListEntry(_("Supporter Key"), config.plugins.epgShare.supporterKey))
-		self.list.append(getConfigListEntry(_("Debug Ausgabe aktivieren"), config.plugins.epgShare.debug))
+		self.list.append(getConfigListEntry(_("Debug Ausgabe in der Console"), config.plugins.epgShare.debug))
+		self.list.append(getConfigListEntry(_("Debug Ausgabe in Log schreiben /tmp/epgshare.log"), config.plugins.epgShare.writelog))
 
 	def changedEntry(self):
 		self.createConfigList()
@@ -721,6 +738,7 @@ class epgShareSetup(Screen, ConfigListScreen):
 		config.plugins.epgShare.debug.save()
 		config.plugins.epgShare.save()
 		config.plugins.epgShare.afterAuto.save()
+		config.plugins.epgShare.writelog.save()
 		configfile.save()
 		if config.plugins.epgShare.auto.value:
 			if not bg_timer.isRunning():
